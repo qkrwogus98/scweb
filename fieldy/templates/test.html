@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+
+{% block title %}시뮬레이션{% endblock title %}
+
+{% block content %}
+<div class="externalInfoBox" style="left: 10px; right: unset">
+  <h3 class="controlTitle">시뮬레이션 결과</h3>
+  <button class="toggleControlBtn">&#9650;</button>
+  <div class="contents">
+    <table class="table table-dark table-bordered" style="/* min-width: 300px; */">
+    <thead>
+      <tr>
+        <th>트럭</th>
+        <th>굴착기</th>
+        <th>생산성</th>
+        <th>단위 비용</th>
+        <th>영상</th>
+      </tr>
+    </thead>
+    <tbody id="productivityBody" class="table-group-divider">
+    </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="externalInfoBox">
+  <h3 class="controlTitle">시공 현황</h3>
+  <button class="toggleControlBtn">&#9650;</button>
+  <div class="contents">
+    <table class="table table-dark table-bordered border-white">
+    <thead>
+      <tr>
+        <th></th>
+        <th colspan="4">유휴장비 / 총 대수</th>
+      </tr>
+      <tr>
+        <td>장비</td>
+        <td>트럭</td>
+        <td>굴착기</td>
+        <td>도저</td>
+        <td>롤러</td>
+      </tr>
+    </thead>
+    <tbody id="equipmentQuantity" class="table-group-divider">
+    </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc5YzciLCJpZCI6NTc3MzMsImlhdCI6MTYyNzg0NTE4Mn0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    terrain: Cesium.Terrain.fromWorldTerrain(),
+  });
+  viewer.scene.globe.enableLighting = true;
+
+  const DateTime = luxon.DateTime;
+  const datetimeFormatter = (date, formatter) => {
+    const jsDate = Cesium.JulianDate.toDate(date);
+    const dateTime = DateTime.fromJSDate(jsDate).setZone("local");
+    return dateTime.toLocaleString(formatter);
+  };
+
+  viewer.animation.viewModel.timeFormatter = (date, viewModel) =>
+    datetimeFormatter(date, DateTime.TIME_WITH_SECONDS);
+  viewer.animation.viewModel.dateFormatter = (date, viewModel) =>
+    datetimeFormatter(date, DateTime.DATE_SHORT);
+  viewer.timeline.makeLabel = (date) =>
+    datetimeFormatter(date, DateTime.DATETIME_SHORT_WITH_SECONDS);
+
+
+  const dataSourcePromise = Cesium.CzmlDataSource.load(
+    "/new/{{ project_id }}/czml?{{ request.query_string.decode('UTF-8') | safe }}"
+  );
+
+  const entities = [];
+  const positionProperties = [];
+
+  viewer.dataSources.add(dataSourcePromise).then(function (dataSource) {
+    dataSource.entities.values.forEach((item) => {
+      item.label = {
+        text: item.id,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(
+          0.0,
+          200.0
+        ),
+        eyeOffset: new Cesium.Cartesian3(0, 10, 0),
+      }
+
+      if (item.id.includes('PolyLine') || item.id.includes('Path') || item.id.includes('Excavator')) {
+        return
+      }
+
+      entities.push(item);
+      positionProperties.push(item.position);
+
+      let new_heading = 0;
+
+      if (item.id.includes('DumpTruck')) {
+        new_heading = -Math.PI / 2 + Math.PI / 360 * 18;
+      } else if (item.id.includes('Dozer')) {
+        new_heading = -Math.PI / 2;
+      } else if (item.id.includes('Roller')) {
+        // new_heading = -Math.PI / 2;
+      }
+
+      const velocityOrientation = new Cesium.VelocityOrientationProperty(item.position);
+      const correctedOrientation = new Cesium.CallbackProperty((time, result) => {
+        const orientation = velocityOrientation.getValue(time, result);
+        if (!Cesium.defined(orientation)) {
+          return null;
+        }
+        const additionalRotation = Cesium.Transforms.headingPitchRollQuaternion(
+          Cesium.Cartesian3.ZERO,
+          new Cesium.HeadingPitchRoll(new_heading, 0, 0)
+        );
+        return Cesium.Quaternion.multiply(orientation, additionalRotation, result);
+      }, false);
+      item.orientation = correctedOrientation;
+
+    });
+
+    console.log(entities)
+  });
+
+  function start() {
+    // viewer.clock.shouldAnimate = true;
+    viewer.scene.postRender.addEventListener(() => {
+      let zOffset = 0;
+
+      entities.forEach((entity, i) => {
+        if (entity.id.includes('DumpTruck')) zOffset = 5;
+        else if (entity.id.includes('Dozer')) zOffset = 5;
+        else zOffset = 0;
+
+        try {
+          const position = positionProperties[i].getValue(viewer.clock.currentTime);
+          // TODO: czml 만들때 시간 position 부분 꽉 채우기
+          const clampedPosition = viewer.scene.clampToHeight(position, entities);
+          if (!Cesium.defined(clampedPosition))
+            return
+          if (zOffset !== 0) {
+            const cartographicPosition = Cesium.Cartographic.fromCartesian(clampedPosition);
+            cartographicPosition.height += zOffset;
+            const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
+            entity.position = adjustedPosition;
+          } else {
+            entity.position = clampedPosition;
+          }
+        } catch (e) {
+          // console.log(e, viewer.clock.currentTime);
+        }
+      });
+    });
+  }
+
+  /*
+  // Rotation an entity
+  document.getElementById('applyRotation').addEventListener('click', (e) => {
+    var heading = Cesium.Math.toRadians(parseFloat(document.getElementById("headingInput").value));
+    var pitch = Cesium.Math.toRadians(parseFloat(document.getElementById("pitchInput").value));
+    var roll = Cesium.Math.toRadians(parseFloat(document.getElementById("rollInput").value));
+
+    var quaternion = Cesium.Transforms.headingPitchRollQuaternion(entity3.position.getValue(viewer.clock.currentTime), new Cesium.HeadingPitchRoll(heading, pitch, roll));
+    entity3.orientation = new Cesium.ConstantProperty(quaternion);
+
+    // Log quaternion for debugging
+    console.log("Quaternion:", quaternion);
+    console.log([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
+  })
+   */
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction(function(event) {
+    var cartesian = viewer.scene.pickPosition(event.position);
+    console.log([cartesian.x, cartesian.y, cartesian.z])
+    console.log({
+      position: viewer.camera.position,
+      orientation: {
+        heading: viewer.camera.heading,
+        pitch: viewer.camera.pitch,
+        roll: viewer.camera.roll
+      }
+    })
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  async function loadPaths() {
+    const res = await fetch('/api/v0/projects/{{ project_id }}');
+    const data = await res.json();
+    console.log(data)
+    viewer.camera.setView({
+      destination: data.pos1.position, orientation: data.pos1.orientation,
+      endTransform: Cesium.Matrix4.IDENTITY,
+    });
+    if (data.tileset) {
+      const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(data.tileset));
+
+      if (viewer.scene.clampToHeightSupported) {
+        tileset.initialTilesLoaded.addEventListener(start);
+      } else {
+        window.alert("This browser does not support clampToHeight.");
+      }
+
+    }
+  }
+
+  loadPaths();
+
+  const tic = new Cesium.TimeIntervalCollection();
+  let defaultQueue = {};
+  async function loadQueue() {
+    const res = await fetch('/new/{{ project_id }}/json?{{ request.query_string.decode('UTF-8') | safe }}');
+    const data = await res.json();
+    defaultQueue = data.queue;
+
+    const tbody = document.getElementById('equipmentQuantity');
+
+    const row = tbody.insertRow();
+    row.insertCell(0).textContent = '대수';
+    row.insertCell(1).innerHTML = `<span id="dumpNum">-</span> / ${defaultQueue['Dump']['length']}`;
+    row.insertCell(2).innerHTML = `<span id="excavatorNum">-</span> / ${defaultQueue['Excavator']['length']}`;
+    row.insertCell(3).innerHTML = `<span id="dozerNum">-</span> / ${defaultQueue['Dozer']['length']}`;
+    row.insertCell(4).innerHTML = `<span id="rollerNum">-</span> / ${defaultQueue['Roller']['length']}`;
+
+    for (let x of data.data) {
+      tic.addInterval(new Cesium.TimeInterval({
+        start: Cesium.JulianDate.fromIso8601(x.start),
+        stop: Cesium.JulianDate.fromIso8601(x.stop),
+        isStartIncluded: true,
+        isStopIncluded: false,
+        data: x.data
+      }))
+    }
+
+    const createArray = n => Array.from({ length: 7 }, (_, i) => n - 3 + i).filter(val => val >= 1);
+    const currentDumpNum = {{ request.args.get('dump', 2) }};
+    const list = createArray(currentDumpNum);
+    const tbody2 = document.getElementById('productivityBody');
+    for (let x of list) {
+      const newRow = tbody2.insertRow();
+
+      newRow.insertCell(0).textContent = x;
+      newRow.insertCell(1).innerHTML = x === currentDumpNum ? data.productivity.toFixed(5) : `
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>`;
+      newRow.insertCell(2).textContent = '-';
+      newRow.insertCell(3).innerHTML = `<input type="checkbox" disabled${x === currentDumpNum ? ' checked' : ''}>`;
+
+      if (x === list[0]) {
+        const newCell = newRow.insertCell(1);
+        newCell.textContent = {{ request.args.get('excavator', 1) }};
+        newCell.rowSpan = list.length;
+        newCell.classList.add('align-middle');
+      }
+    }
+
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] === currentDumpNum) continue;
+
+      const res2 = await fetch(`/new/{{ project_id }}/prod?{{ (encoded + '&' if encoded else '') | safe }}dump=${list[i]}`);
+      const result2 = await res2.json();
+      tbody2.rows[i].cells[i === 0 ? 2 : 1].innerText = result2.productivity.toFixed(5);
+    }
+
+    let maxVal = -Infinity;
+    let maxRow = null;
+
+    // const rows = tbody2.rows;
+    const rows = tbody2.querySelectorAll('tr')
+    rows.forEach((row, i) => {
+        const value = parseFloat(row.cells[i === 0 ? 2 : 1].innerText);
+
+        if (value > maxVal) {
+            maxVal = value;
+            maxRow = row;
+        }
+    });
+
+    if (maxRow) {
+        maxRow.classList.add('table-primary');
+    }
+
+  }
+  loadQueue();
+
+  viewer.clock.onTick.addEventListener(function (clock) {
+    const currentDate = clock.currentTime;
+    const interval = tic.findIntervalContainingDate(currentDate);
+
+    if (interval && interval.data) {
+      try {
+        for (let e of ['Dump', 'Excavator', 'Dozer', 'Roller']) {
+          const num = interval.data[defaultQueue[e]['id']];
+          const elem = document.getElementById(`${e.toLowerCase()}Num`);
+          elem.innerText = num;
+          elem.className = num > 0 ? "text-danger" : "";
+        }
+      } catch (e) {}
+    }
+  });
+</script>
+{% endblock %}

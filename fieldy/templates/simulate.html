@@ -1,0 +1,510 @@
+{% extends 'base.html' %}
+
+{% block title %}시뮬레이션{% endblock title %}
+
+{% block content %}
+<div class="externalInfoBox" style="left: 10px; right: unset">
+  <h3 class="controlTitle">시뮬레이션 결과</h3>
+  <button class="toggleControlBtn">&#9650;</button>
+  <div class="contents">
+    <table class="table table-dark table-bordered mb-3" style="/* min-width: 300px; */">
+    <thead class="text-center">
+      <tr>
+        <th colspan="4">장비 대수 (대)</th>
+        <th rowspan="2">생산성<br>(m<sup>3</sup>/hr)</th>
+        <th rowspan="2">단위비용<br>(원/m<sup>3</sup>)</th>
+      </tr>
+      <tr>
+        <th>트럭</th>
+        <th>굴착기</th>
+        <th>도저</th>
+        <th>롤러</th>
+      </tr>
+    </thead>
+    <tbody id="productivityBody" class="table-group-divider">
+    </tbody>
+    </table>
+    <div id="chartBody" style="display: none; text-align: center;">
+      <canvas id="myChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="externalInfoBox">
+  <h3 class="controlTitle">시공 현황</h3>
+  <button class="toggleControlBtn">&#9650;</button>
+  <div class="contents">
+    <table class="table table-dark table-bordered border-white">
+    <thead class="text-center">
+      <tr>
+        <th></th>
+        <th colspan="4">유휴장비 / 총 대수</th>
+      </tr>
+      <tr>  
+        <td>장비</td>
+        <td>트럭</td>
+        <td>굴착기</td>
+        <td>도저</td>
+        <td>롤러</td>
+      </tr>
+    </thead>
+    <tbody id="equipmentQuantity" class="table-group-divider">
+    </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="rotationControls" class="d-none">
+  Heading: <input type="number" id="headingInput" value="0"> degrees<br>
+  Pitch: <input type="number" id="pitchInput" value="0"> degrees<br>
+  Roll: <input type="number" id="rollInput" value="0"> degrees<br>
+  <button id="applyRotation">Apply Rotation</button>
+</div>
+{% endblock %}
+
+{% block script %}
+<script src="//cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  Cesium.Ion.defaultAccessToken = "{{ cs_token }}";
+
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    terrain: Cesium.Terrain.fromWorldTerrain({
+      // requestVertexNormals: true
+    }),
+    terrainExaggeration: 1.0,
+    maximumScreenSpaceError: 1
+  });
+  viewer.scene.globe.enableLighting = true;
+  viewer.scene.globe.depthTestAgainstTerrain = true;
+
+
+  /*
+  viewer.extend(Cesium.viewerCesiumInspectorMixin);
+  document.getElementById('refreshScene').addEventListener('click', (e) => {
+    viewer.scene.requestRender();
+    e.preventDefault();
+  });
+
+   */
+
+
+  const ctx = document.getElementById('myChart');
+
+  const DateTime = luxon.DateTime;
+  const datetimeFormatter = (date, formatter) => {
+    const jsDate = Cesium.JulianDate.toDate(date);
+    const dateTime = DateTime.fromJSDate(jsDate).setZone("local");
+    return dateTime.toLocaleString(formatter);
+  };
+
+  viewer.animation.viewModel.timeFormatter = (date, viewModel) =>
+    datetimeFormatter(date, DateTime.TIME_WITH_SECONDS);
+  viewer.animation.viewModel.dateFormatter = (date, viewModel) =>
+    datetimeFormatter(date, DateTime.DATE_SHORT);
+  viewer.timeline.makeLabel = (date) =>
+    datetimeFormatter(date, DateTime.DATETIME_SHORT_WITH_SECONDS);
+
+
+  const dataSourcePromise = Cesium.CzmlDataSource.load(
+    "/new/{{ project_id }}/czml2"
+  );
+
+  const entities = [];
+  const positionProperties = [];
+  let excavatorModel;
+
+  let modelData = {};
+
+
+  viewer.dataSources.add(dataSourcePromise).then(function (dataSource) {
+    dataSource.entities.values.forEach((item) => {
+      item.label = {
+        text: item.id,
+        /*
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(
+          0.0,
+          1000.0  // 250
+        ),
+         */
+        eyeOffset: new Cesium.Cartesian3(0, 30, 0),
+      }
+
+      if (item.id.includes('Excavator')) {
+        excavatorModel = item;
+      }
+
+      if (item.id.includes('PolyLine') || item.id.includes('Path') || item.id.includes('Excavator')) {
+        return
+      }
+
+      entities.push(item);
+      positionProperties.push(item.position);
+
+      item.model.cull = false;
+
+      let new_heading = 0;
+
+      if (item.id.includes('DumpTruck')) {
+        new_heading = -Math.PI / 2 + Math.PI / 360 * 18;
+      } else if (item.id.includes('Dozer')) {
+        new_heading = -Math.PI / 2;
+      } else if (item.id.includes('Roller')) {
+        // new_heading = -Math.PI / 2;
+      }
+
+      const velocityOrientation = new Cesium.VelocityOrientationProperty(item.position);
+      const correctedOrientation = new Cesium.CallbackProperty((time, result) => {
+        const orientation = velocityOrientation.getValue(time, result);
+        if (!Cesium.defined(orientation)) {
+          return null;
+        }
+        const additionalRotation = Cesium.Transforms.headingPitchRollQuaternion(
+          Cesium.Cartesian3.ZERO,
+          new Cesium.HeadingPitchRoll(new_heading, 0, 0)
+        );
+        return Cesium.Quaternion.multiply(orientation, additionalRotation, result);
+      }, false);
+      item.orientation = correctedOrientation;
+
+    });
+
+    console.log(entities)
+  });
+
+  document.getElementById('applyRotation').addEventListener('click', (e) => {
+    var heading = Cesium.Math.toRadians(parseFloat(document.getElementById("headingInput").value));
+    var pitch = Cesium.Math.toRadians(parseFloat(document.getElementById("pitchInput").value));
+    var roll = Cesium.Math.toRadians(parseFloat(document.getElementById("rollInput").value));
+
+    var quaternion = Cesium.Transforms.headingPitchRollQuaternion(excavatorModel.position.getValue(viewer.clock.currentTime), new Cesium.HeadingPitchRoll(heading, pitch, roll));
+    excavatorModel.orientation = new Cesium.ConstantProperty(quaternion);
+
+    // Log quaternion for debugging
+    console.log("Quaternion:", quaternion);
+    console.log([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
+  })
+
+
+  function start() {
+    // viewer.clock.shouldAnimate = true;
+    viewer.scene.postRender.addEventListener(() => {
+      let zOffset = 0;
+
+      entities.forEach((entity, i) => {
+        /*
+        if (entity.id.includes('DumpTruck')) zOffset = 5;
+        else if (entity.id.includes('Dozer')) zOffset = 5;
+        else zOffset = 0;
+
+         */
+
+        try {
+          const position = positionProperties[i].getValue(viewer.clock.currentTime);
+          // const clampedPosition = viewer.scene.clampToHeight(position, entities);
+          const clampedPosition = viewer.scene.clampToHeightMostDetailed(position, entities, 2.0);
+          /*
+          if (!Cesium.defined(clampedPosition))
+            return
+
+           */
+          clampedPosition.then((updatedCartesians) => {
+            // console.log(updatedCartesians)
+            if (entity.id.includes('DumpTruck') || entity.id.includes('Dozer')) {
+              const cartographicPosition = Cesium.Cartographic.fromCartesian(updatedCartesians);
+              cartographicPosition.height += 5;
+              const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
+              entity.position = adjustedPosition;
+            } else {
+              entity.position = updatedCartesians;
+            }
+          });
+          /*
+          if (zOffset !== 0) {
+            const cartographicPosition = Cesium.Cartographic.fromCartesian(clampedPosition);
+            cartographicPosition.height += zOffset;
+            const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
+            entity.position = adjustedPosition;
+          } else {
+            entity.position = clampedPosition;
+          }
+
+           */
+        } catch (e) {
+          // console.log(e, viewer.clock.currentTime);
+        }
+      });
+    });
+  }
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction(function(event) {
+    var cartesian = viewer.scene.pickPosition(event.position);
+    console.log([cartesian.x, cartesian.y, cartesian.z])
+    console.log({
+      position: viewer.camera.position,
+      orientation: {
+        heading: viewer.camera.heading,
+        pitch: viewer.camera.pitch,
+        roll: viewer.camera.roll
+      }
+    })
+    const cartographicPosition = Cesium.Cartographic.fromCartesian(cartesian);
+    const longitude = Cesium.Math.toDegrees(cartographicPosition.longitude);
+    const latitude = Cesium.Math.toDegrees(cartographicPosition.latitude);
+    console.log([latitude, longitude]);
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  async function loadPaths() {
+    const res = await fetch('/api/v0/projects/{{ project_id }}');
+    const data = await res.json();
+    console.log(data)
+    let posData = Object.keys(data.pos3).length ? data.pos3 : data.pos1;
+    viewer.camera.setView({
+      destination: posData.position, orientation: posData.orientation,
+      endTransform: Cesium.Matrix4.IDENTITY,
+    });
+    if (data.tileset) {
+      // const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(data.tileset, {
+      //   maximumScreenSpaceError: 1,
+      // }));
+      tileset_id = parseInt(data.tileset)
+      const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromIonAssetId(data.tileset, {
+        maximumScreenSpaceError: 1,
+      }));
+
+      if (viewer.scene.clampToHeightSupported) {
+        tileset.initialTilesLoaded.addEventListener(start);
+      } else {
+        window.alert("This browser does not support clampToHeight.");
+      }
+    }
+    // viewer.terrainProvider.requestTileGeometry(rectangle);
+  }
+
+  loadPaths();
+
+  const tic = new Cesium.TimeIntervalCollection();
+  let defaultQueue = {};
+  async function loadQueue() {
+    const res = await fetch('/new/{{ project_id }}/json2');
+    const data = await res.json();
+    defaultQueue = data.queue;
+
+    const tbody = document.getElementById('equipmentQuantity');
+
+    const row = tbody.insertRow();
+    row.insertCell(0).textContent = '대수';
+    row.insertCell(1).innerHTML = `<div class="text-center"><span id="dumpNum">-</span> / ${defaultQueue['dump']['length']}</div>`;
+row.insertCell(2).innerHTML = `<div class="text-center"><span id="excavatorNum">-</span> / ${defaultQueue['excavator']['length']}</div>`;
+row.insertCell(3).innerHTML = `<div class="text-center"><span id="dozerNum">-</span> / ${defaultQueue['dozer']['length']}</div>`;
+row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</span> / ${defaultQueue.roller?.length ?? 1}</div>`;
+
+
+    for (let x of data.data) {
+      tic.addInterval(new Cesium.TimeInterval({
+        start: Cesium.JulianDate.fromIso8601(x.start),
+        stop: Cesium.JulianDate.fromIso8601(x.stop),
+        isStartIncluded: true,
+        isStopIncluded: false,
+        data: x.data
+      }))
+    }
+
+    const createArray = n => Array.from({ length: 7 }, (_, i) => n - 3 + i).filter(val => val >= 1);
+    const currentDumpNum = defaultQueue.dump?.length ?? 2;
+    const list = createArray(currentDumpNum);
+    const tbody2 = document.getElementById('productivityBody');
+    for (let x of list) {
+      const newRow = tbody2.insertRow();
+
+      newRow.insertCell(0).textContent = x;
+      newRow.insertCell(1).innerHTML = x === currentDumpNum ? data.productivity.toFixed(5) : `
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>`;
+      newRow.insertCell(2).innerHTML = x === currentDumpNum ? data.unitCost.toFixed(3) : `
+        <div class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">Loading...</span>
+        </div>`;
+      newRow.insertCell(3).innerHTML = `<input type="checkbox" disabled${x === currentDumpNum ? ' checked' : ''}>`;
+
+      let newCell;
+      if (x === list[0]) {
+        newCell = newRow.insertCell(1);
+        //newCell.textContent = defaultQueue.excavator?.length ?? 1;
+	      newCell.textContent = 0        
+	      newCell.rowSpan = 99;  // list.length
+        newCell.classList.add('align-middle');
+
+        newCell = newRow.insertCell(1);
+        //newCell.textContent = defaultQueue.dozer?.length ?? 1;
+        newCell.textContent = 1
+	      newCell.rowSpan = 99;
+        newCell.classList.add('align-middle');
+
+        newCell = newRow.insertCell(1);
+        newCell.textContent = defaultQueue.roller?.length ?? 1;
+        newCell.rowSpan = 99;
+        newCell.classList.add('align-middle');
+      }
+    }
+
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] === currentDumpNum) continue;
+
+      const res2 = await fetch(`/new/{{ project_id }}/prod2?dump=${list[i]}`);
+      const result2 = await res2.json();
+      tbody2.rows[i].cells[i === 0 ? 4 : 1].innerText = result2.productivity.toFixed(5);
+      tbody2.rows[i].cells[i === 0 ? 5 : 2].innerText = result2.unitCost.toFixed(3);
+    }
+
+    let i = list.length - 1;
+    let lastDumpNum = list[list.length - 1] + 1;
+    let lastProductivity = parseFloat(tbody2.rows[i].cells[1].innerText);
+    let newProductivity = Infinity;
+    while (1) {
+      const res2 = await fetch(`/new/{{ project_id }}/prod2?dump=${lastDumpNum}`);
+      const result2 = await res2.json();
+      newProductivity = parseFloat(result2.productivity.toFixed(5));
+      const newRow = tbody2.insertRow();
+      newRow.insertCell(0).textContent = lastDumpNum++;
+      newRow.insertCell(1).innerText = newProductivity;
+      newRow.insertCell(2).innerText = result2.unitCost.toFixed(3);
+      // newRow.insertCell(3).innerHTML = `<input type="checkbox" disabled>`;
+      console.log([newProductivity, lastProductivity])
+      if (newProductivity <= lastProductivity) {
+        break;
+      }
+      lastProductivity = newProductivity;
+    }
+
+    let maxVal = -Infinity;
+    let maxRow = null;
+    const prodVal = [];
+
+    // const rows = tbody2.rows;
+    let rows = tbody2.querySelectorAll('tr')
+    rows.forEach((row, i) => {
+        const value = parseFloat(row.cells[i === 0 ? 4 : 1].innerText);
+        prodVal.push(value);
+
+        if (value > maxVal) {
+            maxVal = value;
+            maxRow = row;
+        }
+    });
+
+    if (maxRow) {
+        maxRow.classList.add('table-primary');
+    }
+
+    let minVal = Infinity;
+    let minRow = null;
+    const unitCostVal = [];
+
+    rows.forEach((row, i) => {
+        const value = parseFloat(row.cells[i === 0 ? 5 : 2].innerText);
+        unitCostVal.push(value);
+
+        if (value < minVal) {
+            minVal = value;
+            minRow = row;
+        }
+    });
+
+    if (minRow) {
+        minRow.classList.add('table-danger');
+    }
+
+    const dumpNumVal = [];
+
+    rows.forEach((row, i) => {
+        const value = parseFloat(row.cells[0].innerText);
+        dumpNumVal.push(value);
+    });
+
+    document.getElementById('chartBody').style.display = 'block';
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: dumpNumVal,
+        datasets: [
+          {
+            label: '생산성 (m³/hr)',
+            data: prodVal,
+            // borderColor: Utils.CHART_COLORS.red,
+            // backgroundColor: Utils.transparentize(Utils.CHART_COLORS.red, 0.5),
+            yAxisID: 'y',
+          },
+          {
+            label: '단위비용 (원/m³)',
+            data: unitCostVal,
+            // borderColor: Utils.CHART_COLORS.blue,
+            // backgroundColor: Utils.transparentize(Utils.CHART_COLORS.blue, 0.5),
+            yAxisID: 'y1',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        stacked: false,
+        plugins: {
+          title: {
+            display: true,
+            text: '장비대수별 생산성 및 비용 그래프'
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            title: {
+              display: true,
+              text: '트럭 대수'
+            }
+          },
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+
+            // grid line settings
+            grid: {
+              drawOnChartArea: false, // only want the grid lines for one axis to show up
+            },
+          },
+        }
+      },
+    });
+  }
+  loadQueue();
+
+  viewer.clock.onTick.addEventListener(function (clock) {
+    const currentDate = clock.currentTime;
+    const interval = tic.findIntervalContainingDate(currentDate);
+
+    if (interval && interval.data) {
+      try {
+        for (let e of ['dump', 'excavator', 'dozer', 'roller']) {
+          const num = interval.data[defaultQueue[e]['id']];
+          const elem = document.getElementById(`${e.toLowerCase()}Num`);
+          elem.innerText = num;
+          elem.className = num > 0 ? "text-danger" : "";
+        }
+      } catch (e) {}
+    }
+  });
+
+ 
+   
+
+</script>
+{% endblock %}

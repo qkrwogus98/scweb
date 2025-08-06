@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Realtime</title>
+  <script src="/static/Cesium/Cesium.js"></script>
+  <script src="/static/luxon.min.js"></script>
+  <link rel="stylesheet" href="/static/Cesium/Cesium.css">
+  <link rel="preconnect" href="//fieldy.cdn.ntruss.com">
+
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script> <!-- Ensure this is loaded correctly -->
+
+ <style>
+    html, body, #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    #projectSelector {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 800px;
+      max-height: 400px;
+      background-color: rgba(0, 0, 0, 0.7);
+      border-radius: 10px;
+      padding: 20px;
+      color: white;
+      overflow-y: auto;
+    }
+    .project-item {
+      margin-bottom: 10px;
+      padding: 10px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .project-item:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+    .project-name, .project-address {
+      display: inline-block;
+    }
+    .project-address {
+      float: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 450px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="projectSelector"></div>
+  <div id="dataDisplay" style="position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); padding: 10px; color: white; border-radius: 10px;">Waiting for data...</div>
+  <script src="/static/CesiumUnminified/Cesium.js"></script>
+  <script src="/static/luxon.min.js"></script>
+
+  <script>
+    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc5YzciLCJpZCI6NTc3MzMsImlhdCI6MTYyNzg0NTE4Mn0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      terrain: Cesium.Terrain.fromWorldTerrain({
+        // requestVertexNormals: true
+      }),
+      terrainExaggeration: 1.0,
+      maximumScreenSpaceError: 1,
+      timeline : false,
+      animation : false,
+      shouldAnimate:true
+    });
+    viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+
+    const offsetSeconds = 10;
+    const now = Cesium.JulianDate.now();
+    const realTimeMinusOffset = Cesium.JulianDate.addSeconds(now, -offsetSeconds, new Cesium.JulianDate());
+    viewer.clock.currentTime = realTimeMinusOffset.clone();
+
+    async function loadPaths(){
+      const res = await fetch('/api/v0/projects/50');
+      const data = await res.json();
+      console.log(data);
+      if (data.tileset) {
+        const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(data.tileset));
+      }
+    }
+
+    loadPaths();
+    const entityMap = new Map();
+
+    const socket = io.connect(window.location.protocol + '//' + window.location.host, {
+        secure: window.location.protocol === 'https:'
+    });
+
+    socket.on('data', function(data) {
+      const dataString = JSON.stringify(data, null, 2);
+      const formattedData = dataString.slice(1, -1);
+      document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
+
+      const position = Cesium.Cartesian3.fromDegrees(data.lng, data.lat);
+      const clampedPosition = viewer.scene.clampToHeightMostDetailed(position,Array.from(entityMap.values()),2);
+
+      clampedPosition.then((updatedCartesians) => {
+        const cartographicPosition = Cesium.Cartographic.fromCartesian(updatedCartesians);
+	
+	if(data.asset_type === 6) cartographicPosition.height += 43.5;
+	else cartographicPosition.height += 44.5;
+        const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
+        if (!entityMap[data.asset_type]) {
+          let modelUri;
+          let labelText;
+          	
+          if (data.asset_type === 6) {
+            modelUri = './static/assets/dump_truck.glb';
+            labelText = 'Dump Truck';
+          } else {
+            modelUri = './static/assets/dozer.glb';
+            labelText = data.asset_type === 1 ? 'Grader' : 'Dozer';
+          }
+
+          entityMap[data.asset_type] = viewer.entities.add({
+            position: new Cesium.SampledPositionProperty(),
+            orientation: new Cesium.SampledProperty(Cesium.Quaternion),
+            model: {
+              uri: modelUri,
+              scale: 3,
+            },
+            label: {
+              text: labelText,
+              font: '14pt sans-serif',
+              fillColor: Cesium.Color.WHITE,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 2,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              pixelOffset: new Cesium.Cartesian2(0, -20),
+            },
+      	    path: new Cesium.PathGraphics({
+              leadTime: 0,
+              trailTime: 60,
+              width: 10,
+              material: new Cesium.PolylineGlowMaterialProperty({
+                  glowPower: 1,
+                  color: Cesium.Color.RED
+                })
+              })
+          });
+        } 
+        const entity = entityMap[data.asset_type];
+        const hpr = new Cesium.HeadingPitchRoll.fromDegrees(data.heading, 0, 0);
+        const orientation = Cesium.Transforms.headingPitchRollQuaternion(adjustedPosition, hpr);
+        const now = Cesium.JulianDate.now();
+        entity.position.addSample(now,adjustedPosition);
+        entity.orientation.addSample(now,orientation);
+        
+      });
+    });
+
+    socket.on('disconnect', function() {
+      console.log('WebSocket connection closed');
+      alert('WebSocket connection closed');
+    });
+
+    socket.on('connect_error', function(error) {
+      console.error('WebSocket error:', error);
+      alert('WebSocket error');
+    });
+
+    console.log('WebSocket script executed');
+
+    const projects = [
+      { name: '김포-파주 실증 현장', address: '경기도 김포시 양촌읍 흥신리 193-174' },
+      // Add more projects as needed
+    ];
+
+    $(document).ready(function() {
+      const projectSelector = $('#projectSelector');
+      projects.forEach(project => {
+        const projectItem = $(`
+          <div class="project-item" data-address="${project.address}">
+            <span class="project-name">${project.name}</span>
+            <span class="project-address">${project.address}</span>
+          </div>
+        `);
+        projectItem.on('click', function() {
+          projectSelector.hide();
+          const position = Cesium.Cartesian3.fromDegrees(126.6303532, 37.6754867,
+            Cesium.Cartographic.fromDegrees(127.40, 37.35).height + 600);
+          viewer.camera.flyTo({
+            destination: position
+          });
+        });
+        projectSelector.append(projectItem);
+      });
+    });
+  </script>
+
+  <!--script src="/static/js/new.js"></script-->
+</body>
+</html>

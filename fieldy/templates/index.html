@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>CIC Smart Construction</title>
+<link href="//cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+  .grayscale {
+    filter: grayscale(90%);
+    transition: filter 0.4s ease;
+  }
+
+  .grayscale:hover {
+    filter: grayscale(0%);
+  }
+</style>
+</head>
+<body>
+
+<header class="p-3 bg-dark text-white">
+  <div class="container">
+    <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+      <a href="{{ url_for('main.index') }}" class="d-flex align-items-center mb-2 me-3 mb-lg-0 text-white text-decoration-none">
+        <img src="//cic.fieldylab.com/static/cic.png" height="34" alt="건설공학연구실 로고">
+        &nbsp; Smart Construction
+      </a>
+    </div>
+  </div>
+</header>
+
+<div class="container bg-body">
+  <section id="content">
+    <h2 class="sticky-xl-top fw-bold pt-3 pt-xl-4 bg-body z-3">프로젝트</h2>
+    <div class="text-end pb-2 pb-xl-3">
+      <!-- 새 프로젝트 생성 버튼과 현장 모니터링 버튼을 같은 줄에 배치 -->
+      <a href="{{ url_for('main.new_project') }}" class="btn btn-outline-dark">새 프로젝트 생성</a>
+      <a href="{{ url_for('main.realtime') }}" class="btn btn-outline-dark">현장 모니터링</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">이름</th>
+            <th scope="col">마지막 수정</th>
+            <th scope="col">삭제</th>
+          </tr>
+        </thead>
+        <tbody class="table-group-divider">
+        {% for project in projects %}
+          <tr>
+            <th scope="row">{{ project.id }}</th>
+            <td><a href="/new/{{ project.id }}">{{ project.name }}</a></td>
+            <td>{{ project.updatedAt.strftime('%Y-%m-%d %X') }}</td>
+            <td><a href="{{ url_for('main.delete_project', project_id=project.id) }}">삭제</a></td>
+          </tr>
+        {% else %}
+          <tr>
+            <td class="text-center" colspan="3">NO DATA</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+
+  <footer class="d-flex flex-wrap justify-content-between align-items-center py-3 my-4 border-top">
+    <p class="col-md-4 mb-0 text-muted">&copy; 2023 CIC Lab.</p>
+
+    <div class="col-md-4 d-flex align-items-center justify-content-center mb-3 mb-md-0 me-md-auto link-dark text-decoration-none">
+      <a href="http://www.smartconstruction.kr/" target="_blank" class="grayscale">
+        <img src="{{ url_for('static', filename='smartconstruction_logo.png') }}" height="34" alt="스마트건설사업단 로고">
+      </a>
+    </div>
+
+  </footer>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  {% for message in get_flashed_messages(with_categories=True) %}
+  <div class="toast align-items-center text-bg-{{ message[0] }} border-0 show top-0 start-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body">{{ message[1] | safe }}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% block script %}{% endblock %}
+<script src="//cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe" crossorigin="anonymous"></script>
+</body>
+</html>

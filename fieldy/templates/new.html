@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='CesiumUnminified/Cesium.css') }}">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+
+  <style>
+    html, body, #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+  }
+  </style>
+</head>
+<body>
+  <div>
+    <input type="file">
+    <input type="text" id="autocomplete" placeholder="주소 검색">
+    <input type="text" id="projectName" placeholder="프로젝트 이름">
+    <button id="next">다음 / 경로 설정</button>
+  </div>
+
+
+  <div id="cesiumContainer"></div>
+
+  <script src="{{ url_for('static', filename='CesiumUnminified/Cesium.js') }}"></script>
+  <script>
+    // CESIUM_BASE_URL = '/static/CesiumUnminified'
+    Cesium.Ion.defaultAccessToken = "{{ cs_token }}";
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      terrain: Cesium.Terrain.fromWorldTerrain(),
+      animation: false,
+      timeline: false
+    });
+
+    $(function() {
+      $("#autocomplete").autocomplete({
+        source: (request, response) => {
+          $.ajax({
+            url: `{{ url_for('api_v0.search_address') }}?query=${request.term}`,
+            success: (data) => {
+              response(
+                $.map(data.documents, function(item) {
+                  return {
+                    label: item.address_name,
+                    value: item.address_name,
+                    lng: parseFloat(item.x),
+                    lat: parseFloat(item.y)
+                  };
+                })
+              );
+            }
+          });
+        },
+        // minLength: 1,
+        select: (event, ui) => {
+          console.log(ui.item);
+          const position = Cesium.Cartesian3.fromDegrees(ui.item.lng, ui.item.lat,
+            Cesium.Cartographic.fromDegrees(ui.item.lng, ui.item.lat).height + 600);
+          viewer.camera.flyTo({
+            destination: position
+          });
+        }
+      });
+    });
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction(function(movement) {
+      console.log({
+          position: viewer.camera.position,
+          orientation: {
+            heading: viewer.camera.heading,
+            pitch: viewer.camera.pitch,
+            roll: viewer.camera.roll
+          }
+        })
+    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+
+    document.getElementById('next').addEventListener('click', async (e) => {
+      const body = {
+        name: $('#projectName').val(),
+        pos1: {
+          position: viewer.camera.position,
+          orientation: {
+            heading: viewer.camera.heading,
+            pitch: viewer.camera.pitch,
+            roll: viewer.camera.roll
+          }
+        },
+        tileset : '2776999'
+      };
+      const res = await fetch('/api/v0/projects', {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.status === 'ok')
+        window.location.href = `/new/${data.id}`;
+    });
+  </script>
+
+  <!--script src="{{ url_for('static', filename='js/new.js') }}"></script-->
+</body>
+</html>

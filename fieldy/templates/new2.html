@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+
+{% block title %}경로 생성{% endblock title %}
+
+{% block content %}
+<div class="externalInfoBox" style="left: 10px; right: unset">
+  <h3 class="controlTitle">경로 생성</h3>
+  <button class="toggleControlBtn">&#9650;</button>
+  <div class="contents">
+    <p>마우스 왼쪽 버튼을 더블 클릭하여 경로 그리기를 시작해보세요.<br>종료하려면 마우스 오른쪽을 눌러주세요.</p>
+
+    <table class="table table-dark table-bordered mb-3" style="/* min-width: 300px; */">
+    <thead class="text-center">
+      <tr>
+        <th scope="col">이름</th>
+        <th scope="col">포인트 개수</th>
+        <th scope="col">삭제</th>
+      </tr>
+    </thead>
+    <tbody id="pathsTable" class="table-group-divider">
+    </tbody>
+    </table>
+
+    <div class="text-center">
+      <button id="next" class="btn btn-primary btn-sm">다음</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  // CESIUM_BASE_URL = '/static/CesiumUnminified'
+  Cesium.Ion.defaultAccessToken = "{{ cs_token }}";
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    terrain: Cesium.Terrain.fromWorldTerrain(),
+    animation: false,
+    timeline: false
+  });
+
+  let loadComplete = false;
+
+  const desiredTime = Cesium.JulianDate.fromIso8601('2023-10-08T12:00:00+09:00');
+  viewer.clock.currentTime = desiredTime;
+  viewer.clock.shouldAnimate = false;
+  viewer.scene.highDynamicRange = true;
+  viewer.scene.globe.enableLighting = true;
+
+	document.getElementById('next').addEventListener('click', async (e) => {
+	    try {
+	        if (!loadComplete) {
+	            alert("로딩이 완료된 후 시도해 주세요.");
+	            return;
+	        }
+
+	        const res = await fetch('/api/v0/projects/{{ project_id }}', {
+	            method: "PUT",
+	            headers: {
+	                'Content-Type': 'application/json'
+	            },
+	            body: JSON.stringify({
+	                paths: pathsData
+	            })
+	        });
+
+	        if (res.ok) {
+	            window.location.href = `/new/{{ project_id }}/model`;
+	        } else {
+	            throw new Error(`Failed to update project: ${res.status} ${res.statusText}`);
+	        }
+	    } catch (error) {
+	        console.error("An error occurred:", error);
+	        alert(`An error occurred: ${error.message}`);
+	    }
+	});
+
+	function removePath(name) {
+	    try {
+	        const elem = document.getElementById('path_' + name);
+	        if (elem) {
+	            elem.parentNode.removeChild(elem);
+	        }
+	        delete pathsData[name];
+	        viewer.entities.removeById(name);
+	    } catch (error) {
+	        console.error("An error occurred while removing the path:", error);
+	        alert(`An error occurred while removing the path: ${error.message}`);
+	    }
+	}
+
+  function removePath(name) {
+    const elem = document.getElementById('path_' + name);
+    if (elem)
+      elem.parentNode.removeChild(elem);
+    delete pathsData[name];
+    viewer.entities.removeById(name);
+  }
+
+  let pathsData = {};
+  const tableBody = document.getElementById('pathsTable');
+
+  async function loadPaths() {
+    const res = await fetch('/api/v0/projects/{{ project_id }}');
+    const data = await res.json();
+    console.log(data)
+    viewer.camera.setView({
+      destination: data.pos1.position, orientation: data.pos1.orientation,
+      endTransform: Cesium.Matrix4.IDENTITY,
+    });
+    if (data.tileset) {
+      // const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(data.tileset, {
+      //   maximumScreenSpaceError: 1,
+      // }));
+      tileset_id = parseInt(data.tileset)
+      const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromIonAssetId(data.tileset, {
+        maximumScreenSpaceError: 1,
+      }));
+      /*
+      tileset.style = new Cesium.Cesium3DTileStyle({
+        color: {
+          conditions: [
+            ['${Height} >= 100', 'color("white", 0.5)'],
+            ['true', 'color("white", 1)']
+          ]
+        }
+      });
+       */
+    }
+    if (data.paths && Object.keys(data.paths).length) {
+      pathsData = data.paths;
+
+      for (const [key, val] of Object.entries(data.paths)) {
+        const row = tableBody.insertRow();
+        row.id = 'path_' + key;
+        row.insertCell(0).textContent = key;  // input으로 바꾸고 onChange일 때 pathsData의 key도 바꾸기
+        row.insertCell(1).textContent = val.length;
+        row.insertCell(2).innerHTML = `<button class="btn btn-sm btn-outline-danger" onclick="removePath('${key}')">삭제</button>`;
+
+        viewer.entities.add({
+          name: key,
+          id: key,
+          position: Cesium.Cartesian3.fromArray(val[0][0]),
+          point: {
+            pixelSize: 15,
+            color: Cesium.Color.GREEN,
+          },
+          polyline: {
+            positions: Cesium.Cartesian3.unpackArray(val.map(subArr => subArr[0]).flat()),
+            material: new Cesium.PolylineOutlineMaterialProperty({
+              color: Cesium.Color.fromRandom({alpha: 0.6}),
+              outlineWidth: 2,
+              outlineColor: Cesium.Color.BLACK,
+            }),
+            width: 10,
+            clampToGround: true,
+          }
+        });
+      }
+    }
+    loadComplete = true;
+  }
+
+  loadPaths();
+
+  const positions = [];
+  let polyline = null;
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction(function(movement) {
+    var cartesian = viewer.scene.pickPosition(movement.position);
+    if (Cesium.defined(cartesian)) {
+      positions.push(cartesian);
+
+      // polyline = null로 하면 entity가 사라지는 줄 알고 !polyline -> positions.length === 1로 바꿨는데 그대로네
+      if (positions.length === 1) {
+        polyline = viewer.entities.add({
+          polyline: {
+            positions: positions,
+            width: 10,
+            material: Cesium.Color.RED,
+            clampToGround: true
+          },
+          position: cartesian,
+          point: {
+            pixelSize: 10,
+            color: Cesium.Color.BLUE
+          }
+        });
+      } else {
+        polyline.polyline.positions = positions;
+      }
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+  handler.setInputAction(function(movement) {
+    var cartesian = viewer.scene.pickPosition(movement.position);
+    if (Cesium.defined(cartesian) && positions.length) {
+      positions.push(cartesian);
+      polyline.polyline.positions = positions;
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+
+  // Right click: End drawing and show popup to set name
+  handler.setInputAction(function() {
+    if (positions.length) {
+      showNamePopup();
+    }
+    console.log(positions)
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  function showNamePopup() {
+    viewer.selectedEntity = new Cesium.Entity({
+      id: '경로 이름 지정',
+      description: `
+        <div style="text-align: center">
+          <label for="lineName">이름</label>
+          <input id="lineName" type="text" />
+          <button class="button-4" id="setNameButton" class="btn btn-danger">설정</button>
+        </div>
+      `
+    });
+    // viewer.infoBox.frame.contentDocument.body.addEventListener('load', (d) => {
+    //   console.log('asdasdas')
+    //   d.getElementById('setNameButton').addEventListener('click', setNameForLine);
+    // })
+    const adder = setInterval(function() {
+      const frame = viewer.infoBox.frame;
+      const frameDoc = frame.contentDocument || frame.contentWindow.document;
+      const setNameButton = frameDoc.getElementById('setNameButton');
+      if (setNameButton) {
+        setNameButton.addEventListener('click', setNameForLine);
+        clearTimeout(adder);
+      }
+    }, 100);
+  }
+
+  function setNameForLine() {
+    const frame = viewer.infoBox.frame;
+    const frameDoc = frame.contentDocument || frame.contentWindow.document;
+    var nameInput = frameDoc.getElementById('lineName');
+
+    if (nameInput && polyline) {
+      polyline.name = nameInput.value;
+    }
+    const data = [];
+    for (let pos of positions) {
+      const cartographic = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pos);
+      const lon = Cesium.Math.toDegrees(cartographic.longitude);
+      const lat = Cesium.Math.toDegrees(cartographic.latitude);
+      data.push([[pos.x, pos.y, pos.z], [lon, lat]]);
+    }
+    pathsData[nameInput.value] = data;
+    const row = tableBody.insertRow();
+    row.id = 'path_' + nameInput.value;
+    row.insertCell(0).textContent = nameInput.value;
+    row.insertCell(1).textContent = positions.length;
+    row.insertCell(2).innerHTML = `<button class="btn btn-sm btn-outline-danger" onclick="removePath('${nameInput.value}')">삭제</button>`
+    polyline.id = nameInput.value
+
+    viewer.selectedEntity = undefined;
+    // positions = [];
+    positions.length = 0;
+    // polyline = null;
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,81 @@
+[
+  {
+    "id": "document",
+    "version": "1.0",
+    "clock": {
+      "interval": "2023-09-23T15:18:00+09:00/2023-09-23T15:19:45+09:00",
+      "currentTime": "2023-10-17T10:00:00+09:00",
+      "multiplier": 50,
+      "range": "LOOP_STOP",
+      "step": "SYSTEM_CLOCK_MULTIPLIER"
+    }
+  },
+  {
+    "id": "_DumpTruck",
+    "model": {
+      "gltf": "//fieldy.cdn.ntruss.com/sc/CAT_785C.glb",
+      "scale": 0.2,
+      "color": {"rgba": [255, 0, 0, 255]},
+      "colorBlendMode": "MIX",
+      "colorBlendAmount": 0.5
+    },
+    "position": {
+      "interpolationAlgorithm": "LINEAR",
+      "forwardExtrapolationType": "HOLD"
+    }
+  },
+  {
+    "id": "_PolyLine",
+    "polyline": {
+      "positions": {
+      },
+      "material": {
+        "polylineOutline": {
+          "color": {
+              "rgba": [255, 0, 0, 50]
+          },
+          "outlineColor": {
+              "rgba": [0, 0, 0, 255]
+          },
+          "outlineWidth": 2
+        }
+      },
+      "width": 5,
+      "clampToGround": true
+    }
+  },
+  {
+    "id": "_Excavator",
+    "model": {
+      "gltf": "//fieldy.cdn.ntruss.com/sc/models/excavator.glb",
+      "scale": 1
+    },
+    "position": {
+      "cartesian": [-3020481.772925505, 4056780.4435730274, 3872883.43287323]
+    },
+    "orientation": {
+    }
+  },
+  {
+    "id": "_Dozer",
+    "model": {
+      "gltf": "//fieldy.cdn.ntruss.com/sc/models/dozer.glb",
+      "scale": 4
+    },
+    "position": {
+      "interpolationAlgorithm": "LINEAR",
+      "forwardExtrapolationType": "HOLD"
+    }
+  },
+  {
+    "id": "_Roller",
+    "model": {
+      "gltf": "//fieldy.cdn.ntruss.com/sc/models/roller.glb",
+      "scale": 50
+    },
+    "position": {
+      "interpolationAlgorithm": "LINEAR",
+      "forwardExtrapolationType": "HOLD"
+    }
+  }
+]

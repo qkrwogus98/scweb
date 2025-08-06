@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}{% endblock title %} - CIC SC</title>
+  {# CesiumUnminified #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='Cesium/Cesium.css') }}">
+  <link href="//cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ" crossorigin="anonymous">
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="preconnect" href="//fieldy.cdn.ntruss.com">
+  <style>
+    html, body, #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    #rotationControls {
+      color: #fff;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    /*
+    #toggleControl {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+    }
+    */
+
+    .externalInfoBox {
+        color: #fff;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: rgba(0, 0, 0, 0.8);
+        padding: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
+    .toggleControlBtn {
+        position: absolute;
+        top: 0;
+        right: 0;
+        background-color: #333;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        border-top-right-radius: 8px;
+        border-bottom-left-radius: 8px;
+        padding: 1px 10px;
+        transition: background-color 0.3s;
+    }
+
+    .toggleControlBtn:hover {
+        background-color: #555;
+    }
+
+    .externalInfoBox .contents input[type="number"],
+    #applyRotation {
+        padding: 5px;
+        margin: 5px 0;
+        border-radius: 5px;
+        border: none;
+    }
+
+    #applyRotation {
+        background-color: #0077FF;
+        color: #fff;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    #applyRotation:hover {
+        background-color: #0055CC;
+    }
+
+    .controlTitle {
+        margin: 0;
+        padding: 0;
+        font-size: 1.2em;
+        margin-bottom: 10px;
+        color: #fff;
+        text-align: center;
+        padding-top: 15px;
+    }
+
+    #equipmentQuantity span {
+        /* color: red; */
+        font-weight: bold;
+    }
+
+    #pathsInfo {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  {% block content %}{% endblock content %}
+
+  <!--div class="externalInfoBox">
+    <h3 class="controlTitle">Rotation Controls</h3>
+    <button class="toggleControlBtn">&#9650;</button>
+    <div class="contents">
+      Heading: <input type="number" id="headingInput" value="0"> degrees<br>
+      Pitch: <input type="number" id="pitchInput" value="0"> degrees<br>
+      Roll: <input type="number" id="rollInput" value="0"> degrees<br>
+      <button id="applyRotation">Apply Rotation</button>
+    </div>
+  </div-->
+
+  <script src="{{ url_for('static', filename='Cesium/Cesium.js') }}"></script>
+  <script src="{{ url_for('static', filename='luxon.min.js') }}"></script>
+  {% block script %}{% endblock %}
+  <script>
+    document.querySelectorAll(".toggleControlBtn").forEach(function(btn) {
+      btn.addEventListener("click", (e) => {
+        const controlContents = btn.parentElement.querySelector(".contents");
+        if (controlContents.style.display === "none") {
+          controlContents.style.display = "block";
+          btn.innerHTML = '&#9650;';
+        } else {
+          controlContents.style.display = "none";
+          btn.innerHTML = '&#9660;';
+        }
+      });
+    });
+  </script>
+  <script src="//cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe" crossorigin="anonymous"></script>
+  <!--script src="{{ url_for('static', filename='js/new.js') }}"></script-->
+</body>
+</html>

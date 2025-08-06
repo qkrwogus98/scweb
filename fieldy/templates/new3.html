@@ -1,0 +1,494 @@
+{% extends 'base.html' %}
+
+{% block title %}모델 생성{% endblock title %}
+
+{% block content %}
+<div id="loadingBarContainer" style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 100; background-color: #000; opacity: 0.5; padding: 5px;">
+  <div id="loadingBar" style="background-color: #07f; height: 20px;min-width: 300px"></div>
+</div>
+
+<div class="externalInfoBox" style="left: 10px; right: unset">
+  <h3 class="controlTitle">모델 생성</h3>
+  <button class="toggleControlBtn">&#9650;</button>
+  <div class="contents">
+    <p>Element를 드래그하여 지도 위에 얹으세요.</p>
+    <div id="drag-items" class="mb-3 text-center">
+      <img id="nor" src="{{ url_for('static', filename='element/nor.png') }}" draggable="true" width="50" data-short-name="nor" data-full-id="normal">
+      <img id="com" src="{{ url_for('static', filename='element/com.png') }}" draggable="true" width="50" data-short-name="com" data-full-id="combi">
+      <img id="que" src="{{ url_for('static', filename='element/que.png') }}" draggable="true" width="50" data-short-name="que" data-full-id="queue">
+      <img id="cou" src="{{ url_for('static', filename='element/cou.png') }}" draggable="true" width="50" data-short-name="cou" data-full-id="count">
+      <img id="func" src="{{ url_for('static', filename='element/func.png') }}" draggable="true" width="50" data-short-name="func" data-full-id="function">
+    </div>
+    <div class="mb-3">
+      <label for="formGroupExampleInput" class="form-label">장비 대여 비용</label>
+      <div class="input-group input-group-sm mb-1">
+        <span class="input-group-text">트럭</span>
+        <input type="text" class="form-control form-control-sm" id="cost_dump" style="text-align: right;" onchange="updateEtcInput('cost_dump', this.value)">
+        <span class="input-group-text">원/일</span>
+      </div>
+      <div class="input-group input-group-sm mb-1">
+        <span class="input-group-text">굴착기</span>
+        <input type="text" class="form-control form-control-sm" id="cost_excavator" style="text-align: right;" onchange="updateEtcInput('cost_excavator', this.value)">
+        <span class="input-group-text">원/일</span>
+      </div>
+      <div class="input-group input-group-sm mb-1">
+        <span class="input-group-text">도저</span>
+        <input type="text" class="form-control form-control-sm" id="cost_dozer" style="text-align: right;" onchange="updateEtcInput('cost_dozer', this.value)">
+        <span class="input-group-text">원/일</span>
+      </div>
+      <div class="input-group input-group-sm mb-3">
+        <span class="input-group-text">롤러</span>
+        <input type="text" class="form-control form-control-sm" id="cost_roller" style="text-align: right;" onchange="updateEtcInput('cost_roller', this.value)">
+        <span class="input-group-text">원/일</span>
+      </div>
+
+      <label for="formGroupExampleInput" class="form-label">트럭 적재 용량</label>
+      <div class="input-group input-group-sm mb-3">
+        <input type="text" class="form-control form-control-sm" id="dump_capacity " style="text-align: right;" onchange="updateEtcInput('dump_capacity', this.value)">
+        <span class="input-group-text">m<sup>3</sup></span>
+      </div>
+
+      <div class="d-grid gap-2">
+        <button class="btn btn-warning btn-sm" type="button" onclick="savePosition()">현재 위치 저장</button>
+      </div>
+    </div>
+    <div class="text-center">
+      <!--button id="prevButton" type="button" class="btn btn-secondary btn-sm">이전</button-->
+      <a href="/new/{{ project_id }}" class="btn btn-secondary btn-sm">이전</a>
+      <button id="saveButton" class="btn btn-light btn-sm">저장</button>
+      <button id="nextButton" class="btn btn-primary btn-sm">다음(저장)</button>
+    </div>
+  </div>
+</div>
+
+<div class="externalInfoBox">
+  <h3 class="controlTitle">설정</h3>
+  <button class="toggleControlBtn">&#9650;</button>
+  <div class="contents" id="settingBody">
+    Element를 선택해 보세요.
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  Cesium.Ion.defaultAccessToken = "{{ cs_token }}";
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    terrain: Cesium.Terrain.fromWorldTerrain(),
+    animation: false,
+    timeline: false,
+  });
+
+  let loadComplete = false;
+
+  var loadingBar = document.getElementById('loadingBar');
+  var loadingBarContainer = document.getElementById('loadingBarContainer');
+
+  loadingBarContainer.style.display = 'none';
+
+  let lastElementId = 0;
+  const modelBillboardCollection = viewer.scene.primitives.add(new Cesium.BillboardCollection());
+  const modelBillboard = {};
+
+  let modelData = {};
+  let etcData = {};
+  let posData = {};
+
+  const desiredTime = Cesium.JulianDate.fromIso8601('2023-10-08T12:00:00+09:00');
+  viewer.clock.currentTime = desiredTime;
+  viewer.clock.shouldAnimate = false;
+
+  async function saveData() {
+    if (!loadComplete) {
+      alert("로딩이 완료된 후 시도해 주세요.");
+      return;
+    }
+    const res = await fetch('/api/v0/projects/{{ project_id }}', {
+      method: "PUT",
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: {
+          model: modelData,
+          etc: etcData,
+        },
+        pos3: posData
+      })
+    });
+    return res;
+  }
+
+  document.getElementById('nextButton').addEventListener('click', async (e) => {
+    const res = await saveData();
+    if (res.ok)
+      window.location.href = `/new/{{ project_id }}/simulate`;
+  });
+
+  document.getElementById('saveButton').addEventListener('click', async (e) => {
+    await saveData();
+  });
+
+  let tileset;
+  async function loadPaths() {
+    const res = await fetch('/api/v0/projects/{{ project_id }}');
+    const data = await res.json();
+    console.log(data)
+    viewer.camera.setView({
+      destination: data.pos1.position, orientation: data.pos1.orientation,
+      endTransform: Cesium.Matrix4.IDENTITY,
+    });
+    if (data.tileset) {
+            // const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(data.tileset, {
+      //   maximumScreenSpaceError: 1,
+      // }));
+      tileset_id = parseInt(data.tileset)
+      const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromIonAssetId(data.tileset, {
+        maximumScreenSpaceError: 1,
+      }));
+    }
+    if (data.paths && Object.keys(data.paths).length) {
+      pathsData = data.paths;
+
+      for (const [key, val] of Object.entries(data.paths)) {
+        viewer.entities.add({
+          name: key,
+          id: key,
+          position: Cesium.Cartesian3.fromArray(val[0][0]),
+          point: {
+            pixelSize: 10,
+            color: Cesium.Color.GREEN,
+          },
+          polyline: {
+            positions: Cesium.Cartesian3.unpackArray(val.map(subArr => subArr[0]).flat()),
+            material: new Cesium.PolylineOutlineMaterialProperty({
+              color: Cesium.Color.fromRandom({alpha: 0.7}),
+              outlineWidth: 2,
+              outlineColor: Cesium.Color.BLACK,
+            }),
+            width: 7,
+            clampToGround: true,
+          }
+        });
+      }
+    }
+    if (data.model?.model && Object.keys(data.model.model).length) {
+      modelData = data.model.model;
+      for (const [key, val] of Object.entries(modelData)) {
+        try {
+          makeElement(key, val.type, Cesium.Cartesian3.fromArray(val.position));
+        } catch (e) {}
+      }
+      lastElementId = Math.max(...Object.keys(modelData)) + 1;
+    }
+    if (data.model?.etc) {
+      etcData = data.model.etc;
+      for (const [key, val] of Object.entries(etcData)) {
+        document.getElementById(key).value = val;
+      }
+    }
+    if (Object.keys(data.pos3).length) {
+      posData = data.pos3;
+    }
+    loadComplete = true;
+  }
+
+  viewer.container.addEventListener('dragover', function(e) {
+    e.preventDefault();
+  });
+
+  const ABOVE_BILLBOARD_ELEMENT = 20;
+
+  function makeElement(id, type, cartesian) {
+    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+    const longitude = Cesium.Math.toDegrees(cartographic.longitude);
+    const latitude = Cesium.Math.toDegrees(cartographic.latitude);
+    const height = cartographic.height + ABOVE_BILLBOARD_ELEMENT;
+
+    const elem = document.getElementById(type);
+    const billboard = modelBillboardCollection.add({
+      id: `model_${id}`,
+      image: elem.src,
+      width: 25,
+      height: 25,
+      sizeInMeters: true,
+      position: Cesium.Cartesian3.fromDegrees(longitude, latitude, height)
+    });
+    modelBillboard[id] = billboard;
+    return billboard;
+  }
+
+  document.getElementById('drag-items').addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text', e.target.id)
+  });
+
+  // 이미지 드롭 이벤트
+  viewer.container.addEventListener('drop', function(e) {
+    e.preventDefault();
+
+    const dropPosition = new Cesium.Cartesian2(e.clientX, e.clientY);
+    const cartesian = viewer.scene.pickPosition(dropPosition);
+
+    if (cartesian) {
+      makeElement(lastElementId, e.dataTransfer.getData('text'), cartesian);
+      modelData[lastElementId++] = {
+        type: e.dataTransfer.getData('text'),
+        position: [cartesian.x, cartesian.y, cartesian.z]
+      }
+    }
+  });
+
+  function updateInput(id, key, val) {
+    modelData[id][key] = val;
+    if (key === 'path') {
+      document.getElementById('settingElementPathOption').disabled = !(val === '_option');
+      console.log(!(val === '_option'))
+    } else if (key === 'equipment') {
+      document.getElementById('settingRotation').style.display = val === 'excavator' ? 'block' : 'none';
+    } else if (key.startsWith('ex_')) {
+      const quat = Cesium.Transforms.headingPitchRollQuaternion(
+        Cesium.Cartesian3.fromArray(modelData[id].position),
+        new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(parseFloat(val)), 0, 0)
+      );
+      console.log([quat.x, quat.y, quat.z, quat.w])
+      modelData[id][`${key}_orientation`] = [quat.x, quat.y, quat.z, quat.w];
+    }
+  }
+
+  function updateEtcInput(key, val) {
+    val = val.replace(/\s+/g, '').replace(/,/g, ''); // 공백과 쉼표 제거
+    etcData[key] = val;
+  }
+
+  function savePosition() {
+    posData = {
+      position: viewer.camera.position,
+      orientation: {
+        heading: viewer.camera.heading,
+        pitch: viewer.camera.pitch,
+        roll: viewer.camera.roll
+      }
+    };
+  }
+
+  function elementRemove(id) {
+    try {
+      modelBillboardCollection.remove(modelBillboard[id]);
+      delete modelBillboard[id];
+      delete modelData[id];
+    } catch (e) {}
+  }
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction(function(click) {
+    var pickedObject = viewer.scene.pick(click.position);
+    const settingBody = document.getElementById('settingBody');
+
+    if (Cesium.defined(pickedObject) && pickedObject.collection === modelBillboardCollection) {
+      const splitString = pickedObject.id.split("_");
+      const elemId = parseInt(splitString[1]);
+      const element = modelData[elemId];
+
+      if (element.type === 'que') {
+        settingBody.innerHTML = `
+<div class="mb-1">
+  <label for="settingElementId" class="form-label">ID</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementId" value="${elemId}" disabled readonly>
+</div>
+<div class="mb-1">
+  <label for="settingElementDesc" class="form-label">이름</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementDesc" onchange="updateInput(${elemId}, 'desc', this.value)" value="${element.desc ?? ''}">
+</div>
+
+<div class="mb-1">
+  <label for="settingElementLength" class="form-label">길이</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementLength" onchange="updateInput(${elemId}, 'length', this.value)" value="${element.length ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementStart" class="form-label">시작 엔터티</label>
+  <select id="settingElementStart" class="form-select form-select-sm" onchange="updateInput(${elemId}, 'start', this.value)" value="${element.start ?? false}">
+    <option value="false">false</option>
+    <option value="true">true</option>
+  </select>
+</div>
+<div class="mb-1">
+  <label for="settingElementEquipment" class="form-label">장비 유형</label>
+  <select id="settingElementEquipment" class="form-select form-select-sm" onchange="updateInput(${elemId}, 'equipment', this.value)" value="${element.equipment ?? ''}">
+    <option selected>선택</option>
+    <option value="dump">트럭</option>
+    <option value="excavator">굴착기</option>
+    <option value="dozer">도저</option>
+    <option value="roller">롤러</option>
+  </select>
+</div>
+<div class="mb-1" id="settingRotation" style="display: none;">
+  <label for="settingElementRotation" class="form-label">회전 반경</label>
+  <div class="input-group input-group-sm mb-1" style="max-width: 180px;">
+    <input type="text" class="form-control form-control-sm" placeholder="시작" onchange="updateInput(${elemId}, 'ex_1', this.value)" value="${element.ex_1 ?? ''}">
+    <input type="text" class="form-control form-control-sm" placeholder="끝" onchange="updateInput(${elemId}, 'ex_2', this.value)" value="${element.ex_2 ?? ''}">
+    <span class="input-group-text">°</span>
+  </div>
+  <label for="settingElementBucket" class="form-label">버킷 횟수</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementBucket" onchange="updateInput(${elemId}, 'bucket', this.value)" value="${element.bucket ?? 2}">
+</div>
+<button type="button" class="mt-2 btn btn-danger btn-sm" onclick="elementRemove(${elemId})">삭제</button>`;
+        document.getElementById('settingElementStart').value = element.start ?? false;
+        document.getElementById('settingElementEquipment').value = element.equipment ?? '선택';
+        if (document.getElementById('settingElementEquipment').value === 'excavator') {
+          document.getElementById('settingRotation').style.display = 'block';
+        }
+      } else if (element.type === 'com') {
+        settingBody.innerHTML = `
+<div class="mb-1">
+  <label for="settingElementId" class="form-label">ID</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementId" value="${elemId}" disabled readonly>
+</div>
+<div class="mb-1">
+  <label for="settingElementDesc" class="form-label">이름</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementDesc" onchange="updateInput(${elemId}, 'desc', this.value)" value="${element.desc ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementPre" class="form-label">전</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementPre" onchange="updateInput(${elemId}, 'pre', this.value)" value="${element.pre ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementFol" class="form-label">후</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementFol" onchange="updateInput(${elemId}, 'fol', this.value)" value="${element.fol ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementDuration" class="form-label">시간 (s)</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementDuration" onchange="updateInput(${elemId}, 'duration', this.value)" value="${element.duration ?? ''}">
+</div>
+<div class="mb-3">
+  <label for="settingElementPath" class="form-label">경로</label>
+  <select id="settingElementPath" class="form-select form-select-sm mb-1" onchange="updateInput(${elemId}, 'path', this.value)" value="${element.path ?? ''}">
+    <option selected>선택</option>
+    ${Object.keys(pathsData).map(key => `<option value="${key}">${key}</option>`).join('')}
+    <option value="_option">*별도 설정</option>
+  </select>
+  <input type="text" class="form-control form-control-sm" id="settingElementPathOption" placeholder="-" onchange="updateInput(${elemId}, 'pathOption', this.value)" value="${element.pathOption ?? ''}" disabled>
+</div>
+<button type="button" class="btn btn-danger btn-sm" onclick="elementRemove(${elemId})">삭제</button>`;
+        document.getElementById('settingElementPath').value = element.path ?? '선택';
+        if (document.getElementById('settingElementPath').value === '_option')
+          document.getElementById('settingElementPathOption').disabled = false;
+      } else if (element.type === 'nor') {
+        settingBody.innerHTML = `
+<div class="mb-1">
+  <label for="settingElementId" class="form-label">ID</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementId" value="${elemId}" disabled readonly>
+</div>
+<div class="mb-1">
+  <label for="settingElementDesc" class="form-label">이름</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementDesc" onchange="updateInput(${elemId}, 'desc', this.value)" value="${element.desc ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementFol" class="form-label">후</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementFol" onchange="updateInput(${elemId}, 'fol', this.value)" value="${element.fol ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementDuration" class="form-label">시간 (s)</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementDuration" onchange="updateInput(${elemId}, 'duration', this.value)" value="${element.duration ?? ''}">
+</div>
+<div class="mb-3">
+  <label for="settingElementPath" class="form-label">경로</label>
+  <select id="settingElementPath" class="form-select form-select-sm mb-1" onchange="updateInput(${elemId}, 'path', this.value)" value="${element.path ?? ''}">
+    <option selected>선택</option>
+    ${Object.keys(pathsData).map(key => `<option value="${key}">${key}</option>`).join('')}
+    <option value="_option">*별도 설정</option>
+  </select>
+  <input type="text" class="form-control form-control-sm" id="settingElementPathOption" placeholder="-" onchange="updateInput(${elemId}, 'pathOption', this.value)" value="${element.pathOption ?? ''}" disabled>
+</div>
+<button type="button" class="btn btn-danger btn-sm" onclick="elementRemove(${elemId})">삭제</button>`;
+        document.getElementById('settingElementPath').value = element.path ?? '선택';
+        if (document.getElementById('settingElementPath').value === '_option')
+          document.getElementById('settingElementPathOption').disabled = false;
+      } else if (element.type === 'cou') {
+        settingBody.innerHTML = `
+<div class="mb-1">
+  <label for="settingElementId" class="form-label">ID</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementId" value="${elemId}" disabled readonly>
+</div>
+<div class="mb-1">
+  <label for="settingElementDesc" class="form-label">이름</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementDesc" onchange="updateInput(${elemId}, 'desc', this.value)" value="${element.desc ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementFol" class="form-label">후</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementFol" onchange="updateInput(${elemId}, 'fol', this.value)" value="${element.fol ?? ''}">
+</div>
+<div class="mb-3">
+  <label for="settingElementQuantity" class="form-label">카운트 횟수</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementQuantity" onchange="updateInput(${elemId}, 'quantity', this.value)" value="${element.quantity ?? 1}">
+</div>
+<button type="button" class="btn btn-danger btn-sm" onclick="elementRemove(${elemId})">삭제</button>`;
+      } else if (element.type === 'func') {
+        settingBody.innerHTML = `
+<div class="mb-1">
+  <label for="settingElementId" class="form-label">ID</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementId" value="${elemId}" disabled readonly>
+</div>
+<div class="mb-1">
+  <label for="settingElementDesc" class="form-label">이름</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementDesc" onchange="updateInput(${elemId}, 'desc', this.value)" value="${element.desc ?? ''}">
+</div>
+<div class="mb-1">
+  <label for="settingElementFol" class="form-label">후</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementFol" onchange="updateInput(${elemId}, 'fol', this.value)" value="${element.fol ?? ''}">
+</div>
+<div class="mb-3">
+  <label for="settingElementCon" class="form-label">Consolidation</label>
+  <input type="text" class="form-control form-control-sm" id="settingElementCon" onchange="updateInput(${elemId}, 'con', this.value)" value="${element.con ?? ''}">
+</div>
+<button type="button" class="btn btn-danger btn-sm" onclick="elementRemove(${elemId})">삭제</button>`;
+      }
+    } else {
+      settingBody.innerText = 'Element를 선택해 보세요.';
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  handler.setInputAction((event) => {
+    var cartesian = viewer.scene.pickPosition(event.position);
+    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+    const longitude = Cesium.Math.toDegrees(cartographic.longitude);
+    const latitude = Cesium.Math.toDegrees(cartographic.latitude);
+
+    console.log(cartesian);
+    console.log([longitude, latitude])
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  let selectedEntityId = null;
+  let isDragging = false;
+
+  handler.setInputAction((movement) => {
+    const pickedObject = viewer.scene.pick(movement.position);
+    if (Cesium.defined(pickedObject) && Cesium.defined(pickedObject.id)) {
+      const splitString = pickedObject.id.split("_");
+      selectedEntityId = parseInt(splitString[1]);
+      isDragging = true;
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+  handler.setInputAction(() => {
+    isDragging = false;
+    selectedEntity = null;
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  handler.setInputAction((movement) => {
+    if (isDragging) {
+      if (selectedEntityId) {
+        const cartesian = viewer.scene.pickPosition(movement.endPosition);
+        if (Cesium.defined(cartesian)) {
+          const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+          const height = cartographic.height + ABOVE_BILLBOARD_ELEMENT;
+          modelBillboard[selectedEntityId].position = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, height);
+          viewer.scene.requestRender();
+          modelData[selectedEntityId].position = cartesian;
+        }
+      }
+    }
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+  loadPaths();
+</script>
+{% endblock %}

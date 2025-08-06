@@ -1,0 +1,7 @@
+*.pyc
+__pycache__/
+venv
+kafka_2.13-3.9.1
+.env
+.vscode
+.venv
