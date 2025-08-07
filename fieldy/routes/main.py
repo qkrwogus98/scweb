@@ -416,17 +416,15 @@ def get_czml2_just_project(project_id):
         print(f"🔍 Model data keys: {list(model_data.keys())}")
         print(f"🔍 First element sample: {list(model_data.values())[0] if model_data else 'No data'}")
         
-        # 각 요소의 키 확인
+        # Ensure every element contains required fields
+        required = ['desc', 'type', 'equipment']
+
         for key, val in model_data.items():
-            missing_keys = []
-            if 'desc' not in val:
-                missing_keys.append('desc')
-            if 'type' not in val:
-                missing_keys.append('type')
-            if missing_keys:
-                print(f"⚠️ Element {key} missing keys: {missing_keys}")
-                print(f"   Available keys: {list(val.keys())}")
-                print(f"   Element data: {val}")
+            missing = [f for f in required if f not in val]
+            if missing:
+                return jsonify({
+                    'error': f"Element {key} is missing field(s): {', '.join(missing)}"
+                }), 400
 
         my.add(make_command(model_data))
         my.run()
@@ -588,17 +586,15 @@ def make_json2(project_id):
         print(f"🔍 Model data keys: {list(model_data.keys())}")
         print(f"🔍 First element sample: {list(model_data.values())[0] if model_data else 'No data'}")
         
-        # 각 요소의 키 확인
+        # Ensure every element contains required fields
+        required = ['desc', 'type', 'equipment']
+        
         for key, val in model_data.items():
-            missing_keys = []
-            if 'desc' not in val:
-                missing_keys.append('desc')
-            if 'type' not in val:
-                missing_keys.append('type')
-            if missing_keys:
-                print(f"⚠️ Element {key} missing keys: {missing_keys}")
-                print(f"   Available keys: {list(val.keys())}")
-                print(f"   Element data: {val}")
+            missing = [f for f in required if f not in val]
+            if missing:
+                return jsonify({
+                    'error': f"Element {key} is missing field(s): {', '.join(missing)}"
+                }), 400
 
         my.add(make_command(model_data))
         my.run()
@@ -901,7 +897,6 @@ def czml2():
     start_time = datetime.fromisoformat(default[0]['clock']['currentTime'])
 
     trace = my.envs[0].data
-    return jsonify(trace)
 
     project = Project.query.get(8)
     paths = json.loads(project.paths)
