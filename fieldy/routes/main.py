@@ -898,103 +898,103 @@ def czml2():
 
     trace = my.envs[0].data
 
-    project = Project.query.get(8)
-    paths = json.loads(project.paths)
+    # project = Project.query.get(8)
+    # paths = json.loads(project.paths)
 
-    entities = {}
-    dozer = []
-    roller = []
-    roller_pos = 0
+    # entities = {}
+    # dozer = []
+    # roller = []
+    # roller_pos = 0
 
-    excavator = []  # orientation
-    total_time = -1
+    # excavator = []  # orientation
+    # total_time = -1
 
-    ex_1 = [-0.19803758320250028, -0.39435024799697266, -0.40271755133095016, 0.8019274103022308]  # -90도
-    ex_2 = [-0.41889007164413744, -0.13884192180269161, 0.2823272697675524, 0.8517894935802532]  # -180도
-    last_ex = -1
+    # ex_1 = [-0.19803758320250028, -0.39435024799697266, -0.40271755133095016, 0.8019274103022308]  # -90도
+    # ex_2 = [-0.41889007164413744, -0.13884192180269161, 0.2823272697675524, 0.8517894935802532]  # -180도
+    # last_ex = -1
 
-    path_haul = paths['Truck 길 연장'][::-1] + paths['dump'][::-1] + paths['이동']
+    # path_haul = paths['Truck 길 연장'][::-1] + paths['dump'][::-1] + paths['이동']
 
-    for t in trace:
-        if t['end'] and t['cnt'] > 10 and not t['closed']:
-            num = t['cnt'] % 20
-            total_time = max(total_time, t['end'])
-            if num not in entities:
-                entities[num] = []
-            duration = t['end'] - t['start']
-            if t['current_desc'] == 'Hauling':
-                entities[num].append(make_path(path_haul[::-1], start_time + timedelta(seconds=t['start']), duration))
-            elif t['current_desc'] == 'Returning':
-                entities[num].append(make_path(path_haul, start_time + timedelta(seconds=t['start']), duration))
-            elif t['current_desc'] == 'Loading':
-                if len(entities[num]) == 0:
-                    entities[num].append([
-                                             (start_time + timedelta(seconds=t['start'])).strftime('%Y-%m-%dT%H:%M:%S%z')
-                                         ] + path_haul[::-1][0][0])  # cartesian3 좌표
-                if last_ex != t['start']:
-                    excavator.extend([t['start']] + ex_1)
-                excavator.extend([t['end']] + ex_2)
-                excavator.extend([t['end']+5] + ex_1)
-                last_ex = t['end']
-            elif t['current_desc'] == 'Dumping':
-                pass
-            elif t['current_desc'] == 'Spread':
-                dozer.extend(make_path(paths['Dozer and Roller'], start_time + timedelta(seconds=t['start']), duration))
-            elif t['current_desc'] == 'Compact':
-                ppaath = paths['Dozer and Roller'] if roller_pos == 0 else paths['Dozer and Roller'][::-1]
-                roller.extend(make_path(ppaath, start_time + timedelta(seconds=t['start']), duration))
-                roller_pos ^= 1
+    # for t in trace:
+    #     if t['end'] and t['cnt'] > 10 and not t['closed']:
+    #         num = t['cnt'] % 20
+    #         total_time = max(total_time, t['end'])
+    #         if num not in entities:
+    #             entities[num] = []
+    #         duration = t['end'] - t['start']
+    #         if t['current_desc'] == 'Hauling':
+    #             entities[num].append(make_path(path_haul[::-1], start_time + timedelta(seconds=t['start']), duration))
+    #         elif t['current_desc'] == 'Returning':
+    #             entities[num].append(make_path(path_haul, start_time + timedelta(seconds=t['start']), duration))
+    #         elif t['current_desc'] == 'Loading':
+    #             if len(entities[num]) == 0:
+    #                 entities[num].append([
+    #                                          (start_time + timedelta(seconds=t['start'])).strftime('%Y-%m-%dT%H:%M:%S%z')
+    #                                      ] + path_haul[::-1][0][0])  # cartesian3 좌표
+    #             if last_ex != t['start']:
+    #                 excavator.extend([t['start']] + ex_1)
+    #             excavator.extend([t['end']] + ex_2)
+    #             excavator.extend([t['end']+5] + ex_1)
+    #             last_ex = t['end']
+    #         elif t['current_desc'] == 'Dumping':
+    #             pass
+    #         elif t['current_desc'] == 'Spread':
+    #             dozer.extend(make_path(paths['Dozer and Roller'], start_time + timedelta(seconds=t['start']), duration))
+    #         elif t['current_desc'] == 'Compact':
+    #             ppaath = paths['Dozer and Roller'] if roller_pos == 0 else paths['Dozer and Roller'][::-1]
+    #             roller.extend(make_path(ppaath, start_time + timedelta(seconds=t['start']), duration))
+    #             roller_pos ^= 1
 
 
-    # 초기화
-    excavator[:0] = [0] + ex_1
+    # # 초기화
+    # excavator[:0] = [0] + ex_1
 
-    import copy
+    # import copy
 
-    # generator = UniqueRGBGenerator()
-    generator = DistinctColorGenerator(len(entities))
+    # # generator = UniqueRGBGenerator()
+    # generator = DistinctColorGenerator(len(entities))
 
-    참조 = default[1]
-    for k, v in entities.items():
-        aa = copy.deepcopy(참조)
-        aa['id'] = f'DumpTruck{k + 1}'
-        aa['model']['color']['rgba'] = list(generator.generate()) + [255]
-        aa['position']['cartesian'] = [item for sublist in v for item in sublist]
-        default.append(aa)
+    # 참조 = default[1]
+    # for k, v in entities.items():
+    #     aa = copy.deepcopy(참조)
+    #     aa['id'] = f'DumpTruck{k + 1}'
+    #     aa['model']['color']['rgba'] = list(generator.generate()) + [255]
+    #     aa['position']['cartesian'] = [item for sublist in v for item in sublist]
+    #     default.append(aa)
 
-    참조3 = default[3]
-    aa = copy.deepcopy(참조3)
-    aa['id'] = 'Excavator'
-    aa['orientation']['epoch'] = start_time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    aa['orientation']['unitQuaternion'] = excavator
-    default.append(aa)
+    # 참조3 = default[3]
+    # aa = copy.deepcopy(참조3)
+    # aa['id'] = 'Excavator'
+    # aa['orientation']['epoch'] = start_time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    # aa['orientation']['unitQuaternion'] = excavator
+    # default.append(aa)
 
-    참조4 = default[4]
-    aa = copy.deepcopy(참조4)
-    aa['id'] = f'Dozer'
-    aa['position']['cartesian'] = dozer
-    default.append(aa)
+    # 참조4 = default[4]
+    # aa = copy.deepcopy(참조4)
+    # aa['id'] = f'Dozer'
+    # aa['position']['cartesian'] = dozer
+    # default.append(aa)
 
-    참조5 = default[5]
-    aa = copy.deepcopy(참조5)
-    aa['id'] = f'Roller'
-    aa['position']['cartesian'] = roller
-    default.append(aa)
+    # 참조5 = default[5]
+    # aa = copy.deepcopy(참조5)
+    # aa['id'] = f'Roller'
+    # aa['position']['cartesian'] = roller
+    # default.append(aa)
 
-    참조2 = default[2]
-    for x in ('Haul', 'Return'):
-        aa = copy.deepcopy(참조2)
-        if x == 'Haul':
-            data = path_haul[::-1]
-        elif x == 'Return':
-            data = path_haul
-        aa['id'] = f'{x}Path'
-        aa['polyline']['positions']['cartesian'] = [item for sublist in data for item in sublist[0]]
-        default.append(aa)
+    # 참조2 = default[2]
+    # for x in ('Haul', 'Return'):
+    #     aa = copy.deepcopy(참조2)
+    #     if x == 'Haul':
+    #         data = path_haul[::-1]
+    #     elif x == 'Return':
+    #         data = path_haul
+    #     aa['id'] = f'{x}Path'
+    #     aa['polyline']['positions']['cartesian'] = [item for sublist in data for item in sublist[0]]
+    #     default.append(aa)
 
-    default[0]['clock']['interval'] = f'{start_time.strftime("%Y-%m-%dT%H:%M:%S%z")}/' \
-                                      f'{(start_time + timedelta(seconds=total_time)).strftime("%Y-%m-%dT%H:%M:%S%z")}'
+    # default[0]['clock']['interval'] = f'{start_time.strftime("%Y-%m-%dT%H:%M:%S%z")}/' \
+    #                                   f'{(start_time + timedelta(seconds=total_time)).strftime("%Y-%m-%dT%H:%M:%S%z")}'
 
-    default = [x for x in default if not x['id'].startswith('_')]
+    # default = [x for x in default if not x['id'].startswith('_')]
 
-    return jsonify(default)
+    # return jsonify(default)
