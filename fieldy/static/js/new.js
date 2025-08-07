@@ -4,7 +4,7 @@ import setTimeline from "./timeline.js";
 // (async (Cesium) => {
 // })(Cesium);
 
-Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc5YzciLCJpZCI6NTc3MzMsImlhdCI6MTYyNzg0NTE4Mn0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMjM0YTQ5OS01MTgwLTRjODItYTk0MS04ODQ4ODE2YTdhNTEiLCJpZCI6MzI5MzEwLCJpYXQiOjE3NTQ0NzE0Mzd9.EuurwTHYuKDK-CHcjh1a22P4O6ijJNlb6f2qx8fZctA';
 
 const viewer = new Cesium.Viewer('cesiumContainer', {
   // terrainProvider: await createWorldTerrainAsync()
