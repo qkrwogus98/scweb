@@ -9,6 +9,8 @@ import logging
 import threading
 from dotenv import load_dotenv
 import os
+import traceback
+from flask import jsonify
 
 load_dotenv()
 
@@ -49,6 +51,12 @@ def kafka_listener():
         consumer.close()
     except Exception as e:
         logging.error(f"Kafka listener encountered an error: {e}")
+
+@app.errorhandler(500)
+def internal_error(error):
+    print(f"500 Error: {error}")
+    print(f"Traceback: {traceback.format_exc()}")
+    return jsonify({'error': str(error)}), 500
 
 @socketio.on('connect')
 def handle_connect():
