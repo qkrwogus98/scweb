@@ -436,9 +436,18 @@ def get_czml2_just_project(project_id):
     ex_orientation = dict()
 
     for elemId, elem in my.command.items():
+        # Some commands may not exist in the project model.  Guard against
+        # missing keys instead of throwing a KeyError which results in a 500
+        # response.
+        data = model_data.get(elemId)
+        if not data:
+            continue
+
         if elem.desc in ('Hauling', 'Returning', 'Spread', 'Compact'):
-            path[elem.desc] = eval(model_data[elemId]['pathOption']) \
-                if model_data[elemId].get('path') == '_option' else paths.get(model_data[elemId]['path'])
+            path[elem.desc] = (
+                eval(data['pathOption']) if data.get('path') == '_option'
+                else paths.get(data['path'])
+            )
 
     for key, val in model_data.items():
         if val.get('equipment') == 'excavator':
@@ -591,16 +600,24 @@ def make_json2(project_id):
         'dozer': '도저',
         'roller': '롤러'
     }
-    queue = {
-        val['equipment']: {
+    queue = {}
+    for key, val in model_data.items():
+        eq = val.get('equipment')
+        if eq not in desired_order:
+            continue
+
+        command = my.command.get(key)
+        if not command:
+            continue
+
+        queue[eq] = {
             'id': key,
-            'length': my.command[key]._length,
-            'name': desired_order[val['equipment']]
+            'length': command._length,
+            'name': desired_order[eq]
         }
-        for key, val in model_data.items()
-        if val.get('equipment') in desired_order
-    }
-    queue['_soil'] = {'id': 0, 'length': my.command[0]._length}
+
+    if (soil_cmd := my.command.get(0)):
+        queue['_soil'] = {'id': 0, 'length': soil_cmd._length}
     
     counter = [item for item in my.stats[0]['counter'] if item['desc'] == 'Production of Dump'][0]
     prod_rate = counter['prod_rate']
@@ -644,14 +661,20 @@ def make_prod2(project_id):
     my.add(make_command(model_data))
     my.run()
 
-    queue = {
-        val['equipment']: {
+    queue = {}
+    for key, val in model_data.items():
+        eq = val.get('equipment')
+        if not eq:
+            continue
+
+        command = my.command.get(key)
+        if not command:
+            continue
+
+        queue[eq] = {
             'id': key,
-            'length': my.command[key]._length
+            'length': command._length
         }
-        for key, val in model_data.items()
-        if val.get('equipment')
-    }
 
     counter = [item for item in my.stats[0]['counter'] if item['desc'] == 'Production of Dump'][0]
     prod_rate = counter['prod_rate']
