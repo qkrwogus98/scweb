@@ -15,7 +15,6 @@ from sqlalchemy.orm import joinedload
 
 import os
 from dotenv import load_dotenv
-import traceback
 
 
 bp = Blueprint('main', __name__)
@@ -400,271 +399,231 @@ def get_czml_just_project(project_id):
 @bp.route('/new/<int:project_id>/czml2')
 @csrf.exempt
 def get_czml2_just_project(project_id):
-    try:
-        print(f"🔍 CZML2 DEBUG - Project ID: {project_id}")
-        
-        my = c2.Model()
-        my.debug = True
+    my = c2.Model()
+    my.debug = True
 
-        project = Project.query.get(project_id)
-        paths = json.loads(project.paths)
-        model = json.loads(project.model)
+    project = Project.query.get(project_id)
+    paths = json.loads(project.paths)
+    model = json.loads(project.model)
 
-        model_data = model['model']
-        model_data = {int(key): value for key, value in model_data.items()}
-        
-        print(f"🔍 Model data keys: {list(model_data.keys())}")
-        print(f"🔍 First element sample: {list(model_data.values())[0] if model_data else 'No data'}")
-        
-        # Ensure every element contains required fields
-        required = ['desc', 'type', 'equipment']
+    model_data = model['model']
+    model_data = {int(key): value for key, value in model_data.items()}
 
-        for key, val in model_data.items():
-            missing = [f for f in required if f not in val]
-            if missing:
-                return jsonify({
-                    'error': f"Element {key} is missing field(s): {', '.join(missing)}"
-                }), 400
+    my.add(make_command(model_data))
+    my.run()
 
-        my.add(make_command(model_data))
-        my.run()
+    with open(os.path.join(os.path.dirname(__file__), 'test.json')) as f:
+        default = json.load(f)
 
-        with open(os.path.join(os.path.dirname(__file__), 'test.json')) as f:
-            default = json.load(f)
+    start_time = datetime.fromisoformat(default[0]['clock']['currentTime'])
 
-        start_time = datetime.fromisoformat(default[0]['clock']['currentTime'])
+    trace = my.envs[0].data
 
-        trace = my.envs[0].data
+    entities = {}
+    dozer = []
+    roller = []
+    roller_pos = 0
 
-        entities = {}
-        dozer = []
-        roller = []
-        roller_pos = 0
+    complicated = False
 
-        complicated = False
+    excavator = []  # orientation
+    total_time = -1
 
-        excavator = []  # orientation
-        total_time = -1
+    last_ex = -1
 
-        last_ex = -1
+    path = dict()
+    equipment_ex = None
+    ex_orientation = dict()
 
-        path = dict()
-        equipment_ex = None
-        ex_orientation = dict()
+    for elemId, elem in my.command.items():
+        if elem.desc in ('Hauling', 'Returning', 'Spread', 'Compact'):
+            path[elem.desc] = eval(model_data[elemId]['pathOption']) \
+                if model_data[elemId].get('path') == '_option' else paths.get(model_data[elemId]['path'])
 
-        for elemId, elem in my.command.items():
-            if elem.desc in ('Hauling', 'Returning', 'Spread', 'Compact'):
-                path[elem.desc] = eval(model_data[elemId]['pathOption']) \
-                    if model_data[elemId].get('path') == '_option' else paths.get(model_data[elemId]['path'])
+    for key, val in model_data.items():
+        if val.get('equipment') == 'excavator':
+            equipment_ex = val
+            ex_orientation[1] = val['ex_1_orientation']
+            ex_orientation[2] = val['ex_2_orientation']
 
-        for key, val in model_data.items():
-            if val.get('equipment') == 'excavator':
-                equipment_ex = val
-                ex_orientation[1] = val['ex_1_orientation']
-                ex_orientation[2] = val['ex_2_orientation']
+    first_dozer = None
+    for t in trace:
+        if t['end'] and t['cnt'] > 10 and not t['closed']:
+            num = t['cnt'] % 20
+            total_time = max(total_time, t['end'])
+            if num not in entities:
+                entities[num] = []
+            duration = t['end'] - t['start']
+            if t['current_desc'] == 'Hauling':
+                entities[num].append(make_path(path['Hauling'], start_time + timedelta(seconds=t['start']), duration))
+            elif t['current_desc'] == 'Returning':
+                entities[num].append(make_path(path['Returning'], start_time + timedelta(seconds=t['start']), duration))
+            elif t['current_desc'] == 'Loading':
+                if len(entities[num]) == 0:
+                    entities[num].append([(start_time + timedelta(seconds=t['start'])).strftime('%Y-%m-%dT%H:%M:%S%z')]
+                                         + path['Hauling'][0][0])  # cartesian3 좌표
+                if last_ex != t['start']:
+                    excavator.extend([t['start']] + ex_orientation[1])
 
-        first_dozer = None
-        for t in trace:
-            if t['end'] and t['cnt'] > 10 and not t['closed']:
-                num = t['cnt'] % 20
-                total_time = max(total_time, t['end'])
-                if num not in entities:
-                    entities[num] = []
-                duration = t['end'] - t['start']
-                if t['current_desc'] == 'Hauling':
-                    entities[num].append(make_path(path['Hauling'], start_time + timedelta(seconds=t['start']), duration))
-                elif t['current_desc'] == 'Returning':
-                    entities[num].append(make_path(path['Returning'], start_time + timedelta(seconds=t['start']), duration))
-                elif t['current_desc'] == 'Loading':
-                    if len(entities[num]) == 0:
-                        entities[num].append([(start_time + timedelta(seconds=t['start'])).strftime('%Y-%m-%dT%H:%M:%S%z')]
-                                             + path['Hauling'][0][0])  # cartesian3 좌표
-                    if last_ex != t['start']:
-                        excavator.extend([t['start']] + ex_orientation[1])
-
-                    _bucket = int(equipment_ex.get('bucket', 2))
-                    for i in range(_bucket):
-                        excavator.extend([t['start'] + (i + 1) * duration / _bucket] + ex_orientation[2])
-                        excavator.extend([t['start'] + (i + 1) * duration / _bucket + (10 - (_bucket - 1 - i))] + ex_orientation[1])
-                    last_ex = t['end']
-                elif t['current_desc'] == 'Dumping':
-                    pass
-                elif t['current_desc'] == 'Spread':
-                    complicated = True
-                    dozer.extend(make_path(path['Spread'], start_time + timedelta(seconds=t['start']), duration))
-                    if not first_dozer:
-                        first_dozer = t['start']
-                elif t['current_desc'] == 'Compact':
-                    _path = path['Compact'] if roller_pos == 0 else path['Compact'][::-1]
-                    roller.extend(make_path(_path, start_time + timedelta(seconds=t['start']), duration))
-                    roller_pos ^= 1
-
-        if project_id == 8 or project_id == 16 or project_id == 19:
-            path['Compact'] = path['Spread']
-            now = first_dozer + 3 * 60
-            while now < total_time:
+                _bucket = int(equipment_ex.get('bucket', 2))
+                for i in range(_bucket):
+                    excavator.extend([t['start'] + (i + 1) * duration / _bucket] + ex_orientation[2])
+                    excavator.extend([t['start'] + (i + 1) * duration / _bucket + (10 - (_bucket - 1 - i))] + ex_orientation[1])
+                last_ex = t['end']
+            elif t['current_desc'] == 'Dumping':
+                pass
+            elif t['current_desc'] == 'Spread':
+                complicated = True
+                dozer.extend(make_path(path['Spread'], start_time + timedelta(seconds=t['start']), duration))
+                if not first_dozer:
+                    first_dozer = t['start']
+            elif t['current_desc'] == 'Compact':
                 _path = path['Compact'] if roller_pos == 0 else path['Compact'][::-1]
-                roller.extend(make_path(_path, start_time + timedelta(seconds=now), 3 * 60))
-                now += 3 * 60
+                roller.extend(make_path(_path, start_time + timedelta(seconds=t['start']), duration))
                 roller_pos ^= 1
 
-        # 초기화
-        excavator[:0] = [0.] + ex_orientation[1]
-        if 'Spread' in path:
-            dozer[:0] = [start_time.strftime('%Y-%m-%dT%H:%M:%S%z')] + path['Spread'][0][0]
-        if 'Compact' in path:
-            roller[:0] = [start_time.strftime('%Y-%m-%dT%H:%M:%S%z')] + path['Compact'][0][0]
+    if project_id == 8 or project_id == 16 or project_id == 19:
+        path['Compact'] = path['Spread']
+        now = first_dozer + 3 * 60
+        while now < total_time:
+            _path = path['Compact'] if roller_pos == 0 else path['Compact'][::-1]
+            roller.extend(make_path(_path, start_time + timedelta(seconds=now), 3 * 60))
+            now += 3 * 60
+            roller_pos ^= 1
 
-        import copy
+    # 초기화
+    excavator[:0] = [0.] + ex_orientation[1]
+    if 'Spread' in path:
+        dozer[:0] = [start_time.strftime('%Y-%m-%dT%H:%M:%S%z')] + path['Spread'][0][0]
+    if 'Compact' in path:
+        roller[:0] = [start_time.strftime('%Y-%m-%dT%H:%M:%S%z')] + path['Compact'][0][0]
 
-        # generator = UniqueRGBGenerator()
-        generator = DistinctColorGenerator(len(entities))
+    import copy
 
-        # DumpTruck
-        for k, v in entities.items():
-            aa = copy.deepcopy(default[1])
-            aa['id'] = f'DumpTruck {k + 1}'
-            aa['model']['color']['rgba'] = list(generator.generate()) + [255]
-            aa['position']['cartesian'] = [item for sublist in v for item in sublist]
-            default.append(aa)
+    # generator = UniqueRGBGenerator()
+    generator = DistinctColorGenerator(len(entities))
 
-        # Excavator
-        aa = copy.deepcopy(default[3])
-        aa['id'] = 'Excavator'
-        aa['orientation']['epoch'] = start_time.strftime("%Y-%m-%dT%H:%M:%S%z")
-        aa['orientation']['unitQuaternion'] = excavator
-        aa['position']['cartesian'] = equipment_ex['position']
+    # DumpTruck
+    for k, v in entities.items():
+        aa = copy.deepcopy(default[1])
+        aa['id'] = f'DumpTruck {k + 1}'
+        aa['model']['color']['rgba'] = list(generator.generate()) + [255]
+        aa['position']['cartesian'] = [item for sublist in v for item in sublist]
         default.append(aa)
 
-        if complicated:
-            # Dozer
-            aa = copy.deepcopy(default[4])
-            aa['id'] = f'Dozer'
-            aa['position']['cartesian'] = dozer
-            default.append(aa)
+    # Excavator
+    aa = copy.deepcopy(default[3])
+    aa['id'] = 'Excavator'
+    aa['orientation']['epoch'] = start_time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    aa['orientation']['unitQuaternion'] = excavator
+    aa['position']['cartesian'] = equipment_ex['position']
+    default.append(aa)
 
-            # Roller
-            aa = copy.deepcopy(default[5])
-            aa['id'] = f'Roller'
-            aa['position']['cartesian'] = roller
-            default.append(aa)
+    if complicated:
+        # Dozer
+        aa = copy.deepcopy(default[4])
+        aa['id'] = f'Dozer'
+        aa['position']['cartesian'] = dozer
+        default.append(aa)
 
-        # Path
-        for x in ('Hauling', 'Returning'):
-            aa = copy.deepcopy(default[2])
-            aa['id'] = f'{x} Path'
-            aa['polyline']['positions']['cartesian'] = [item for sublist in path[x] for item in sublist[0]]
-            default.append(aa)
+        # Roller
+        aa = copy.deepcopy(default[5])
+        aa['id'] = f'Roller'
+        aa['position']['cartesian'] = roller
+        default.append(aa)
 
-        default[0]['clock']['interval'] = f'{start_time.strftime("%Y-%m-%dT%H:%M:%S%z")}/' \
-                                          f'{(start_time + timedelta(seconds=total_time)).strftime("%Y-%m-%dT%H:%M:%S%z")}'
+    # Path
+    for x in ('Hauling', 'Returning'):
+        aa = copy.deepcopy(default[2])
+        aa['id'] = f'{x} Path'
+        aa['polyline']['positions']['cartesian'] = [item for sublist in path[x] for item in sublist[0]]
+        default.append(aa)
 
-        default = [x for x in default if not x['id'].startswith('_')]
+    default[0]['clock']['interval'] = f'{start_time.strftime("%Y-%m-%dT%H:%M:%S%z")}/' \
+                                      f'{(start_time + timedelta(seconds=total_time)).strftime("%Y-%m-%dT%H:%M:%S%z")}'
 
-        return jsonify(default)
-        
-    except Exception as e:
-        print(f"❌ CZML2 ERROR: {e}")
-        print(f"   Traceback: {traceback.format_exc()}")
-        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+    default = [x for x in default if not x['id'].startswith('_')]
+
+    return jsonify(default)
+
 
 @bp.route('/new/<int:project_id>/json2')
 @csrf.exempt
 def make_json2(project_id):
-    try:
-        print(f"🔍 JSON2 DEBUG - Project ID: {project_id}")
-        
-        my = c2.Model()
-        my.debug = True
+    my = c2.Model()
+    my.debug = True
 
-        project = Project.query.get(project_id)
-        model = json.loads(project.model)
+    project = Project.query.get(project_id)
+    model = json.loads(project.model)
 
-        model_data = model['model']
-        model_data = {int(key): value for key, value in model_data.items()}
-        
-        print(f"🔍 Model data keys: {list(model_data.keys())}")
-        print(f"🔍 First element sample: {list(model_data.values())[0] if model_data else 'No data'}")
-        
-        # Ensure every element contains required fields
-        required = ['desc', 'type', 'equipment']
-        
-        for key, val in model_data.items():
-            missing = [f for f in required if f not in val]
-            if missing:
-                return jsonify({
-                    'error': f"Element {key} is missing field(s): {', '.join(missing)}"
-                }), 400
+    model_data = model['model']
+    model_data = {int(key): value for key, value in model_data.items()}
 
-        my.add(make_command(model_data))
-        my.run()
+    my.add(make_command(model_data))
+    my.run()
 
-        passive_data = my.envs[0].passive
+    passive_data = my.envs[0].passive
 
-        now_queue = {}
-        result = []
+    now_queue = {}
+    result = []
 
-        for k, v in passive_data.items():
-            now_queue[k] = 0
+    for k, v in passive_data.items():
+        now_queue[k] = 0
 
-        start_time = datetime.fromisoformat('2023-10-17T10:00:00+09:00')
+    start_time = datetime.fromisoformat('2023-10-17T10:00:00+09:00')
 
-        data = my.envs[0].queues
-        for i in range(len(data) - 1):
-            start = data[i]['now']
-            stop = data[i + 1]['now']
-            now_queue[data[i]['id']] = data[i]['val']
-            val = copy.copy(now_queue)
+    data = my.envs[0].queues
+    for i in range(len(data) - 1):
+        start = data[i]['now']
+        stop = data[i + 1]['now']
+        now_queue[data[i]['id']] = data[i]['val']
+        val = copy.copy(now_queue)
 
-            result.append({
-                'start': (start_time + timedelta(seconds=start)).strftime('%Y-%m-%dT%H:%M:%S%z'),
-                'stop': (start_time + timedelta(seconds=stop)).strftime('%Y-%m-%dT%H:%M:%S%z'),
-                'data': val
-            })
-
-        desired_order = {
-            'dump': '트럭',
-            'excavator': '굴착기',
-            'dozer': '도저',
-            'roller': '롤러'
-        }
-        queue = {
-            val['equipment']: {
-                'id': key,
-                'length': my.command[key]._length,
-                'name': desired_order[val['equipment']]
-            }
-            for key, val in model_data.items()
-            if val.get('equipment') in desired_order
-        }
-        queue['_soil'] = {'id': 0, 'length': my.command[0]._length}
-        
-        counter = [item for item in my.stats[0]['counter'] if item['desc'] == 'Production of Dump'][0]
-        prod_rate = counter['prod_rate']
-        productivity = float(model['etc'].get('dump_capacity', 7.89)) * prod_rate * 3600
-
-        price_per_day = 0
-        if e := queue.get('dump'):
-            price_per_day += float(model['etc'].get('cost_dump', 500_000)) * e['length']
-        if e := queue.get('excavator'):
-            price_per_day += float(model['etc'].get('cost_excavator', 900_000)) * e['length']
-        if e := queue.get('dozer'):
-            price_per_day += float(model['etc'].get('cost_dozer', 300_000)) * e['length']
-        if e := queue.get('roller'):
-            price_per_day += float(model['etc'].get('cost_roller', 300_000)) * e['length']
-
-        return jsonify({
-            'queue': queue,
-            'productivity': productivity,
-            'unitCost': price_per_day / (productivity * 8),
-            'avg_interarrival': counter['avg_interarrival'],
-            'data': result
+        result.append({
+            'start': (start_time + timedelta(seconds=start)).strftime('%Y-%m-%dT%H:%M:%S%z'),
+            'stop': (start_time + timedelta(seconds=stop)).strftime('%Y-%m-%dT%H:%M:%S%z'),
+            'data': val
         })
-        
-    except Exception as e:
-        print(f"❌ JSON2 ERROR: {e}")
-        print(f"   Traceback: {traceback.format_exc()}")
-        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+    desired_order = {
+        'dump': '트럭',
+        'excavator': '굴착기',
+        'dozer': '도저',
+        'roller': '롤러'
+    }
+    queue = {
+        val['equipment']: {
+            'id': key,
+            'length': my.command[key]._length,
+            'name': desired_order[val['equipment']]
+        }
+        for key, val in model_data.items()
+        if val.get('equipment') in desired_order
+    }
+    queue['_soil'] = {'id': 0, 'length': my.command[0]._length}
+    
+    counter = [item for item in my.stats[0]['counter'] if item['desc'] == 'Production of Dump'][0]
+    prod_rate = counter['prod_rate']
+    productivity = float(model['etc'].get('dump_capacity', 7.89)) * prod_rate * 3600
+
+    price_per_day = 0
+    if e := queue.get('dump'):
+        price_per_day += float(model['etc'].get('cost_dump', 500_000)) * e['length']
+    if e := queue.get('excavator'):
+        price_per_day += float(model['etc'].get('cost_excavator', 900_000)) * e['length']
+    if e := queue.get('dozer'):
+        price_per_day += float(model['etc'].get('cost_dozer', 300_000)) * e['length']
+    if e := queue.get('roller'):
+        price_per_day += float(model['etc'].get('cost_roller', 300_000)) * e['length']
+
+    return jsonify({
+        'queue': queue,
+        'productivity': productivity,
+        'unitCost': price_per_day / (productivity * 8),
+        'avg_interarrival': counter['avg_interarrival'],
+        'data': result
+    })
+
 
 @bp.route('/new/<int:project_id>/prod2')
 @csrf.exempt
@@ -897,6 +856,7 @@ def czml2():
     start_time = datetime.fromisoformat(default[0]['clock']['currentTime'])
 
     trace = my.envs[0].data
+    return jsonify(trace)
 
     # project = Project.query.get(8)
     # paths = json.loads(project.paths)
