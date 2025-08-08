@@ -89,4 +89,4 @@ if __name__ == "__main__":
     if not debug:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
     
-    socketio.run(app, host=server_ip, port=5000, debug=debug)
+    socketio.run(app, host=server_ip, port=port, debug=debug)
