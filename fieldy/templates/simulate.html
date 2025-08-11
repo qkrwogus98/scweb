@@ -67,6 +67,10 @@
 <script>
   Cesium.Ion.defaultAccessToken = "{{ cs_token }}";
 
+  function formatToInteger(value) {
+    return Math.round(parseFloat(value));
+  }
+
   const viewer = new Cesium.Viewer('cesiumContainer', {
     terrain: Cesium.Terrain.fromWorldTerrain({
       // requestVertexNormals: true
@@ -318,11 +322,11 @@ row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</
       const newRow = tbody2.insertRow();
 
       newRow.insertCell(0).textContent = x;
-      newRow.insertCell(1).innerHTML = x === currentDumpNum ? data.productivity.toFixed(5) : `
+      newRow.insertCell(1).innerHTML = x === currentDumpNum ? formatToInteger(data.productivity) : `
         <div class="spinner-border spinner-border-sm" role="status">
           <span class="visually-hidden">Loading...</span>
         </div>`;
-      newRow.insertCell(2).innerHTML = x === currentDumpNum ? data.unitCost.toFixed(3) : `
+      newRow.insertCell(2).innerHTML = x === currentDumpNum ? formatToInteger(data.unitCost) : `
         <div class="spinner-border spinner-border-sm" role="status">
                     <span class="visually-hidden">Loading...</span>
         </div>`;
@@ -354,8 +358,8 @@ row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</
 
       const res2 = await fetch(`/new/{{ project_id }}/prod2?dump=${list[i]}`);
       const result2 = await res2.json();
-      tbody2.rows[i].cells[i === 0 ? 4 : 1].innerText = result2.productivity.toFixed(5);
-      tbody2.rows[i].cells[i === 0 ? 5 : 2].innerText = result2.unitCost.toFixed(3);
+      tbody2.rows[i].cells[i === 0 ? 4 : 1].innerText = formatToInteger(result2.productivity);
+      tbody2.rows[i].cells[i === 0 ? 5 : 2].innerText = formatToInteger(result2.unitCost);
     }
 
     let i = list.length - 1;
@@ -365,11 +369,11 @@ row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</
     while (1) {
       const res2 = await fetch(`/new/{{ project_id }}/prod2?dump=${lastDumpNum}`);
       const result2 = await res2.json();
-      newProductivity = parseFloat(result2.productivity.toFixed(5));
+      newProductivity = formatToInteger(result2.productivity);
       const newRow = tbody2.insertRow();
       newRow.insertCell(0).textContent = lastDumpNum++;
       newRow.insertCell(1).innerText = newProductivity;
-      newRow.insertCell(2).innerText = result2.unitCost.toFixed(3);
+      newRow.insertCell(2).innerText = formatToInteger(result2.unitCost);
       // newRow.insertCell(3).innerHTML = `<input type="checkbox" disabled>`;
       console.log([newProductivity, lastProductivity])
       if (newProductivity <= lastProductivity) {
