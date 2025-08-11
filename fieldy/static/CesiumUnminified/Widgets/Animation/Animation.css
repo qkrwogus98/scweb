@@ -31,7 +31,7 @@
 }
 .cesium-animation-svgText {
   fill: #edffff;
-  font-family: Sans-Serif;
+  /* font-family: Sans-Serif; */
   font-size: 15px;
   text-anchor: middle;
 }
