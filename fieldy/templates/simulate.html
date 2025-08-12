@@ -13,6 +13,7 @@
         <th colspan="4">장비 대수 (대)</th>
         <th rowspan="2">생산성<br>(m<sup>3</sup>/hr)</th>
         <th rowspan="2">단위비용<br>(원/m<sup>3</sup>)</th>
+        <th rowspan="2">현재 시각화<br>장비 조합</th>
       </tr>
       <tr>
         <th>트럭</th>
@@ -21,11 +22,11 @@
         <th>롤러</th>
       </tr>
     </thead>
-    <tbody id="productivityBody" class="table-group-divider">
+    <tbody id="productivityBody" class="table-group-divider text-center">
     </tbody>
     </table>
-    <div id="chartBody" style="display: none; text-align: center;">
-      <canvas id="myChart"></canvas>
+    <div id="chartBody" style="display: none;" class="text-center bg-dark p-3 rounded" >
+      <canvas id="myChart" height="200"></canvas>
     </div>
   </div>
 </div>
@@ -48,7 +49,7 @@
         <td>롤러</td>
       </tr>
     </thead>
-    <tbody id="equipmentQuantity" class="table-group-divider">
+    <tbody id="equipmentQuantity" class="table-group-divider text-center">
     </tbody>
     </table>
   </div>
@@ -436,15 +437,25 @@ row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</
           {
             label: '생산성 (m³/hr)',
             data: prodVal,
-            // borderColor: Utils.CHART_COLORS.red,
-            // backgroundColor: Utils.transparentize(Utils.CHART_COLORS.red, 0.5),
+            borderColor: '#DC143C',              // 🆕 빨간색
+            backgroundColor: '#212529',
+            borderWidth: 3,                      // 🆕 선 두께
+            pointBackgroundColor: '#DC143C',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 6,                      // 🆕 포인트 크기
             yAxisID: 'y',
           },
           {
             label: '단위비용 (원/m³)',
             data: unitCostVal,
-            // borderColor: Utils.CHART_COLORS.blue,
-            // backgroundColor: Utils.transparentize(Utils.CHART_COLORS.blue, 0.5),
+            borderColor: '#1E3A8A',              // 🆕 청록색
+            backgroundColor: '#212529',
+            borderWidth: 3,                      // 🆕 선 두께
+            pointBackgroundColor: '#1E3A8A',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 6,                      // 🆕 포인트 크기
             yAxisID: 'y1',
           }
         ]
@@ -459,7 +470,30 @@ row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</
         plugins: {
           title: {
             display: true,
-            text: '장비대수별 생산성 및 비용 그래프'
+            text: '장비대수별 생산성 및 비용 그래프',
+            color:'#ffffff',
+            font: {
+              size: 16,
+              weight: 'bold'
+            },
+          },
+          legend: {
+            labels: {
+              color: '#ffffff',
+              font: {
+                size: 14,
+                weight: 'bold'
+              },
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            borderColor: '#ffffff',
+            borderWidth: 1,
+            titleFont: {size: 14, weight: 'bold'},
+            bodyFont: {size: 13}
           }
         },
         scales: {
@@ -467,22 +501,53 @@ row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</
             display: true,
             title: {
               display: true,
-              text: '트럭 대수'
+              text: '트럭 대수',
+              color:'#ffffff',
+              font: {
+                size: 14,
+                weight: 'bold'
+              }
+            },
+            grid: {
+              color: 'rgba(255,255,255,0.2)'
+            },
+            ticks: {
+              color: '#ffffff',
+              font: {
+                size: 14,
+              } 
             }
           },
           y: {
             type: 'linear',
             display: true,
             position: 'left',
+            color:'#ffffff',
+            ticks: {
+              color: '#ffffff',
+              font: {
+                size: 14,
+              }
+            },
+            grid: {
+              color: 'rgba(255,255,255,0.2)'
+            }
           },
           y1: {
             type: 'linear',
             display: true,
             position: 'right',
-
+            color:'#ffffff',
             // grid line settings
+            ticks: {                    // 🆕 눈금 스타일
+              color: '#ffffff',
+              font: {
+                size: 14,
+              }
+            },
             grid: {
               drawOnChartArea: false, // only want the grid lines for one axis to show up
+              color: 'rgba(255, 255, 255, 0.2)'  // 🆕 그리드 스타일
             },
           },
         }
