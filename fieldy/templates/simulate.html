@@ -119,12 +119,27 @@
   let excavatorModel;
 
   let modelData = {};
+  const equipmentNameMapping = {
+    'DumpTruck': '트럭',
+    'Excavator': '굴착기',
+    'Dozer': '도저',
+    'Roller': '롤러'
+  };
 
+  function getKoreanName(entityId) {
+    for (const [english, korean] of Object.entries(equipmentNameMapping)) {
+      if (entityId.includes(english)) {
+        // "DumpTruck 1" -> "트럭 1" 형태로 변환
+        return entityId.replace(english, korean);
+      }
+    }
+    return entityId; // 매칭되지 않으면 원래 이름 반환
+  }
 
   viewer.dataSources.add(dataSourcePromise).then(function (dataSource) {
     dataSource.entities.values.forEach((item) => {
       item.label = {
-        text: item.id,
+        text: getKoreanName(item.id),
         /*
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(
           0.0,
@@ -300,9 +315,9 @@
     const row = tbody.insertRow();
     row.insertCell(0).textContent = '대수';
     row.insertCell(1).innerHTML = `<div class="text-center"><span id="dumpNum">-</span> / ${defaultQueue['dump']['length']}</div>`;
-row.insertCell(2).innerHTML = `<div class="text-center"><span id="excavatorNum">-</span> / ${defaultQueue['excavator']['length']}</div>`;
-row.insertCell(3).innerHTML = `<div class="text-center"><span id="dozerNum">-</span> / ${defaultQueue['dozer']['length']}</div>`;
-row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</span> / ${defaultQueue.roller?.length ?? 1}</div>`;
+    row.insertCell(2).innerHTML = `<div class="text-center"><span id="excavatorNum">-</span> / ${defaultQueue['excavator']['length']}</div>`;
+    row.insertCell(3).innerHTML = `<div class="text-center"><span id="dozerNum">-</span> / ${defaultQueue['dozer']['length']}</div>`;
+    row.insertCell(4).innerHTML = `<div class="text-center"><span id="rollerNum">-</span> / ${defaultQueue.roller?.length ?? 1}</div>`;
 
 
     for (let x of data.data) {
