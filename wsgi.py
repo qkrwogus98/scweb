@@ -33,7 +33,11 @@ def create_kafka_consumer():
 # Middleware to redirect HTTP to HTTPS
 @app.before_request
 def before_request():
-    if not request.is_secure and not debug:
+    if (
+        not request.is_secure
+        and not debug
+        and request.host not in ("localhost", "127.0.0.1")
+    ):
         url = request.url.replace("http://", "https://", 1)
         return redirect(url, code=301)
 
