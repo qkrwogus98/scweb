@@ -6,7 +6,6 @@ import json
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask import request, redirect
 import logging
-import threading
 from dotenv import load_dotenv
 import os
 import traceback
@@ -45,6 +44,7 @@ def kafka_listener():
         for message in consumer:
             data = message.value
             socketio.emit('data', data)
+            socketio.sleep(0)
             if active_clients == 0:
                 print("closing kafka listener")
                 break
@@ -61,13 +61,12 @@ def internal_error(error):
 @socketio.on('connect')
 def handle_connect():
     print("socket connected")
-    global active_clients, consumer_thread
+    global active_clients
     active_clients += 1
     print("current active clients :", active_clients)
 
     if active_clients == 1:  # Start Kafka listener when first client connects
-        consumer_thread = threading.Thread(target=kafka_listener)
-        consumer_thread.start()
+        socketio.start_background_task(kafka_listener)
     emit('status', {'status': 'connected'})
 
 @socketio.on('disconnect')
