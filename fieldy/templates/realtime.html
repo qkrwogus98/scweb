@@ -113,8 +113,8 @@
       clampedPosition.then((updatedCartesians) => {
         const cartographicPosition = Cesium.Cartographic.fromCartesian(updatedCartesians);
 	
-        // if(data.asset_type === 6) cartographicPosition.height += 43.5;
-        // else cartographicPosition.height += 44.5;
+        if(data.asset_type === 6) cartographicPosition.height += 43.5;
+        else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
         if (!entityMap.has(data.asset_type)) {
           let modelUri;
@@ -179,7 +179,7 @@
     console.log('WebSocket script executed');
 
     const projects = [
-      { name: '김포-파주 실증 현장', address: '경기도 김포시 양촌읍 흥신리 193-174' },
+      { name: '김포-파주 실증 현장', address: '경기도 김포시 양촌읍 흥신리 193-174', lat: 37.6754867, lon: 126.6303532 },
       // Add more projects as needed
     ];
 
@@ -194,8 +194,8 @@
         `);
         projectItem.on('click', function() {
           projectSelector.hide();
-          const position = Cesium.Cartesian3.fromDegrees(126.6303532, 37.6754867,
-            Cesium.Cartographic.fromDegrees(127.40, 37.35).height + 600);
+          const position = Cesium.Cartesian3.fromDegrees(project.lon, project.lat,
+            Cesium.Cartographic.fromDegrees(project.lon, project.lat).height + 600);
           viewer.camera.flyTo({
             destination: position
           });
