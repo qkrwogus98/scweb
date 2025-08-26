@@ -85,10 +85,10 @@
     async function loadPaths(){
       const res = await fetch('/api/v0/projects/50');
       const data = await res.json();
-      console.log(data);
-      if (data.tileset) {
-        const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(data.tileset));
-      }
+      console.log('data : ', data);
+      const og_tileset = 'https://fieldy.cdn.ntruss.com/sc/8-3/tileset.json'
+      const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(og_tileset));
+      console.log('tileset : ', tileset)
     }
 
     loadPaths();
