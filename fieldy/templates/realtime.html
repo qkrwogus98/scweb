@@ -115,8 +115,8 @@
       clampedPosition.then((updatedCartesians) => {
         const cartographicPosition = Cesium.Cartographic.fromCartesian(updatedCartesians);
 	
-	if(data.asset_type === 6) cartographicPosition.height += 43.5;
-	else cartographicPosition.height += 44.5;
+        // if(data.asset_type === 6) cartographicPosition.height += 43.5;
+        // else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
         if (!entityMap[data.asset_type]) {
           let modelUri;
@@ -124,10 +124,10 @@
           	
           if (data.asset_type === 6) {
             modelUri = './static/assets/dump_truck.glb';
-            labelText = 'Dump Truck';
+            labelText = '덤프 트럭';
           } else {
             modelUri = './static/assets/dozer.glb';
-            labelText = data.asset_type === 1 ? 'Grader' : 'Dozer';
+            labelText = data.asset_type === 1 ? '불도저' : '그레이더';
           }
 
           entityMap[data.asset_type] = viewer.entities.add({
