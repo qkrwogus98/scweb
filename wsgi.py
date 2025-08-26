@@ -13,14 +13,23 @@ from flask import jsonify
 
 load_dotenv()
 
-
 # Load the debug flag to determine the environment
 FLASK_ENV = get_debug_flag()
 app = create_app(FLASK_ENV)
 debug = os.getenv('DEBUG', 'False').lower() == 'true'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
-active_clients = 0
 
+# 수정: async_mode를 threading으로 변경하고 추가 설정
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode="threading",  # gevent 대신 threading 사용
+    logger=True,  # 디버깅을 위한 로깅 활성화
+    engineio_logger=True,  # Engine.IO 로깅도 활성화
+    ping_timeout=60,  # 핑 타임아웃 증가
+    ping_interval=25  # 핑 간격 설정
+)
+
+active_clients = 0
 
 def create_kafka_consumer():
     return KafkaConsumer(
@@ -28,7 +37,6 @@ def create_kafka_consumer():
         bootstrap_servers='localhost:9092',
         value_deserializer=lambda v: json.loads(v.decode('utf-8'))
     ) 
-
 
 # Middleware to redirect HTTP to HTTPS
 @app.before_request
@@ -75,12 +83,16 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    global active_clients, consumer
+    global active_clients
     active_clients -= 1
     print("current active clients :", active_clients)
-
     emit('status', {'status': 'disconnected'})
-    
+
+# 디버깅을 위한 추가 이벤트 핸들러
+@socketio.on('error')
+def error_handler(e):
+    print(f"Socket.IO error: {e}")
+
 if __name__ == "__main__":
     print("server is running :)")
     # Ensure Flask sees HTTPS connections correctly when behind a proxy
@@ -92,4 +104,13 @@ if __name__ == "__main__":
     if not debug:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
     
-    socketio.run(app, host=server_ip, port=port, debug=debug)
+    print(f"Starting server on {server_ip}:{port}")
+    print(f"Debug mode: {debug}")
+    
+    socketio.run(
+        app, 
+        host=server_ip, 
+        port=port, 
+        debug=debug,
+        use_reloader=False  # 리로더 비활성화로 안정성 향상
+    )
