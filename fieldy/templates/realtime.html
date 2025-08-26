@@ -116,7 +116,7 @@
         // if(data.asset_type === 6) cartographicPosition.height += 43.5;
         // else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
-        if (!entityMap[data.asset_type]) {
+        if (!entityMap.has(data.asset_type)) {
           let modelUri;
           let labelText;
           	
@@ -128,7 +128,7 @@
             labelText = data.asset_type === 1 ? '불도저' : '그레이더';
           }
 
-          entityMap[data.asset_type] = viewer.entities.add({
+          entityMap.set(data.asset_type, viewer.entities.add({
             position: new Cesium.SampledPositionProperty(),
             orientation: new Cesium.SampledProperty(Cesium.Quaternion),
             model: {
@@ -154,9 +154,9 @@
                   color: Cesium.Color.RED
                 })
               })
-          });
+          }));
         } 
-        const entity = entityMap[data.asset_type];
+        const entity = entityMap.get(data.asset_type);
         const hpr = new Cesium.HeadingPitchRoll.fromDegrees(data.heading, 0, 0);
         const orientation = Cesium.Transforms.headingPitchRollQuaternion(adjustedPosition, hpr);
         const now = Cesium.JulianDate.now();
