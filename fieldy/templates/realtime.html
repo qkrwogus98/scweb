@@ -112,13 +112,13 @@
       const { lat, lon, asset_type } = data;
 
       const position = Cesium.Cartesian3.fromDegrees(lon, lat);
-      const clampedPosition = viewer.scene.clampToHeightMostDetailed(position, Array.from(entityMap.values()), 2);
+      const clampedPosition = viewer.scene.clampToHeightMostDetailed([position], Array.from(entityMap.values()), 2);
 
-      clampedPosition.then((updatedCartesians) => {
-        const cartographicPosition = Cesium.Cartographic.fromCartesian(updatedCartesians);
+      clampedPosition.then(([cartesian]) => {
+        const cartographicPosition = Cesium.Cartographic.fromCartesian(cartesian);
 
-        if (asset_type === 6) cartographicPosition.height += 43.5;
-        else cartographicPosition.height += 44.5;
+        // if (asset_type === 6) cartographicPosition.height += 43.5;
+        // else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
 
         if (!entityMap.has(asset_type)) {
