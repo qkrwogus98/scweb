@@ -83,12 +83,13 @@
     viewer.clock.currentTime = realTimeMinusOffset.clone();
 
     async function loadPaths(){
-      const res = await fetch('/api/v0/projects/50');
-      const data = await res.json();
-      console.log('data : ', data);
-      const og_tileset = 'https://fieldy.cdn.ntruss.com/sc/8-3/tileset.json'
-      const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(og_tileset));
-      console.log('tileset : ', tileset)
+    //   viewer.scene.primitives.add(
+    //     await Cesium.Cesium3DTileset.fromUrl(
+    //         "https://tile.googleapis.com/v1/3dtiles/root.json?key=AIzaSyAUOmqO5TvPPYAPN_R68vU_20P2qrOcLdo"
+    //     )
+    // );
+      const osmBuildings = await Cesium.Cesium3DTileset.fromIonAssetId(96188);
+      viewer.scene.primitives.add(osmBuildings);
     }
 
     loadPaths();
@@ -180,6 +181,7 @@
 
     const projects = [
       { name: '김포-파주 실증 현장', address: '경기도 김포시 양촌읍 흥신리 193-174', lat: 37.6754867, lon: 126.6303532 },
+      { name: '파주 고속도로', address: '경기도 파주시 법원읍 보광로 1704-74', lat: 37.8296017, lon: 126.8712626 }
       // Add more projects as needed
     ];
 
