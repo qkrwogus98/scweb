@@ -94,6 +94,7 @@
 
     loadPaths();
     const entityMap = new Map();
+    const previousPositions = new Map();
 
     const socket = io.connect(window.location.protocol + '//' + window.location.host, {
         secure: window.location.protocol === 'https:',
@@ -108,28 +109,31 @@
       const formattedData = dataString.slice(1, -1);
       document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
 
-      const position = Cesium.Cartesian3.fromDegrees(data.lng, data.lat);
-      const clampedPosition = viewer.scene.clampToHeightMostDetailed(position,Array.from(entityMap.values()),2);
+      const { lat, lon, asset_type } = data;
+
+      const position = Cesium.Cartesian3.fromDegrees(lon, lat);
+      const clampedPosition = viewer.scene.clampToHeightMostDetailed(position, Array.from(entityMap.values()), 2);
 
       clampedPosition.then((updatedCartesians) => {
         const cartographicPosition = Cesium.Cartographic.fromCartesian(updatedCartesians);
-	
-        if(data.asset_type === 6) cartographicPosition.height += 43.5;
+
+        if (asset_type === 6) cartographicPosition.height += 43.5;
         else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
-        if (!entityMap.has(data.asset_type)) {
+
+        if (!entityMap.has(asset_type)) {
           let modelUri;
           let labelText;
-          	
-          if (data.asset_type === 6) {
+
+          if (asset_type === 6) {
             modelUri = './static/assets/dump_truck.glb';
             labelText = '덤프 트럭';
           } else {
             modelUri = './static/assets/dozer.glb';
-            labelText = data.asset_type === 1 ? '불도저' : '그레이더';
+            labelText = asset_type === 1 ? '불도저' : '그레이더';
           }
 
-          entityMap.set(data.asset_type, viewer.entities.add({
+          entityMap.set(asset_type, viewer.entities.add({
             position: new Cesium.SampledPositionProperty(),
             orientation: new Cesium.SampledProperty(Cesium.Quaternion),
             model: {
@@ -146,7 +150,7 @@
               verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
               pixelOffset: new Cesium.Cartesian2(0, -20),
             },
-      	    path: new Cesium.PathGraphics({
+            path: new Cesium.PathGraphics({
               leadTime: 0,
               trailTime: 60,
               width: 10,
@@ -156,14 +160,28 @@
                 })
               })
           }));
-        } 
-        const entity = entityMap.get(data.asset_type);
-        const hpr = new Cesium.HeadingPitchRoll.fromDegrees(data.heading, 0, 0);
-        const orientation = Cesium.Transforms.headingPitchRollQuaternion(adjustedPosition, hpr);
+        }
+
+        const entity = entityMap.get(asset_type);
+        const prevCartographic = previousPositions.get(asset_type);
         const now = Cesium.JulianDate.now();
-        entity.position.addSample(now,adjustedPosition);
-        entity.orientation.addSample(now,orientation);
-        
+        entity.position.addSample(now, adjustedPosition);
+
+        if (prevCartographic) {
+          const heading = Math.atan2(
+            cartographicPosition.longitude - prevCartographic.longitude,
+            cartographicPosition.latitude - prevCartographic.latitude
+          );
+          const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0);
+          const orientation = Cesium.Transforms.headingPitchRollQuaternion(adjustedPosition, hpr);
+          entity.orientation.addSample(now, orientation);
+        }
+
+        previousPositions.set(asset_type, {
+          longitude: cartographicPosition.longitude,
+          latitude: cartographicPosition.latitude
+        });
+
       });
     });
 
