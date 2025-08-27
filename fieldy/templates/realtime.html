@@ -94,7 +94,6 @@
 
     loadPaths();
     const entityMap = new Map();
-    const previousPositions = new Map();
 
     const socket = io.connect(window.location.protocol + '//' + window.location.host, {
         secure: window.location.protocol === 'https:',
@@ -133,9 +132,18 @@
             labelText = asset_type === 1 ? '불도저' : '그레이더';
           }
 
+          const pos = new Cesium.SampledPositionProperty();
+          const velocityOrientation = new Cesium.VelocityOrientationProperty(pos);
+          const fixedRotation = Cesium.Quaternion.IDENTITY; // adjust if model needs a fixed rotation
+          const orientation = new Cesium.CallbackProperty(function(time, result) {
+            const base = velocityOrientation.getValue(time, result);
+            if (!base) return fixedRotation;   // or simply return base
+            return Cesium.Quaternion.multiply(base, fixedRotation, result);
+          }, false);
+
           entityMap.set(asset_type, viewer.entities.add({
-            position: new Cesium.SampledPositionProperty(),
-            orientation: new Cesium.SampledProperty(Cesium.Quaternion),
+            position: pos,
+            orientation: orientation,
             model: {
               uri: modelUri,
               scale: 3,
@@ -163,24 +171,8 @@
         }
 
         const entity = entityMap.get(asset_type);
-        const prevCartographic = previousPositions.get(asset_type);
         const now = Cesium.JulianDate.now();
         entity.position.addSample(now, adjustedPosition);
-
-        if (prevCartographic) {
-          const heading = Math.atan2(
-            cartographicPosition.longitude - prevCartographic.longitude,
-            cartographicPosition.latitude - prevCartographic.latitude
-          );
-          const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0);
-          const orientation = Cesium.Transforms.headingPitchRollQuaternion(adjustedPosition, hpr);
-          entity.orientation.addSample(now, orientation);
-        }
-
-        previousPositions.set(asset_type, {
-          longitude: cartographicPosition.longitude,
-          latitude: cartographicPosition.latitude
-        });
 
       });
     });
