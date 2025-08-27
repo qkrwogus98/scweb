@@ -94,6 +94,7 @@
 
     loadPaths();
     const entityMap = new Map();
+    const initializedMap = new Map();
 
     const socket = io.connect(window.location.protocol + '//' + window.location.host, {
         secure: window.location.protocol === 'https:',
@@ -114,6 +115,7 @@
       const clampedPosition = viewer.scene.clampToHeightMostDetailed([position], Array.from(entityMap.values()), 2);
 
       clampedPosition.then(([cartesian]) => {
+        if (!cartesian) return
         const cartographicPosition = Cesium.Cartographic.fromCartesian(cartesian);
 
         // if (asset_type === 6) cartographicPosition.height += 43.5;
@@ -172,8 +174,16 @@
 
         const entity = entityMap.get(asset_type);
         const now = Cesium.JulianDate.now();
+        if (!initializedMap.get(asset_type)) {
+          const past = Cesium.JulianDate.addSeconds(now, -1, new Cesium.JulianDate());
+          entity.position.addSample(past, adjustedPosition);
+          initializedMap.set(asset_type, true);
+        }
         entity.position.addSample(now, adjustedPosition);
 
+      })
+      .catch((error) => {
+        console.error('error : ', error)
       });
     });
 
