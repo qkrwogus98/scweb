@@ -1,7 +1,5 @@
-import * as Cesium from "cesium";
-import { DateTime } from "/static/luxon.min.js";
-
 export default function setTimeline(viewer) {
+  const { DateTime } = luxon;
   const datetimeFormatter = (date, formatter) => {
     const jsDate = Cesium.JulianDate.toDate(date);
     const dateTime = DateTime.fromJSDate(jsDate).setZone("local");

@@ -61,26 +61,23 @@
   <div id="projectSelector"></div>
   <div id="dataDisplay" style="position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); padding: 10px; color: white; border-radius: 10px;">Waiting for data...</div>
 
-  <script>
-    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMjM0YTQ5OS01MTgwLTRjODItYTk0MS04ODQ4ODE2YTdhNTEiLCJpZCI6MzI5MzEwLCJpYXQiOjE3NTQ0NzE0Mzd9.EuurwTHYuKDK-CHcjh1a22P4O6ijJNlb6f2qx8fZctA';
+    <script type="module">
+      import setTimeline from "/static/js/timeline.js";
+      Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMjM0YTQ5OS01MTgwLTRjODItYTk0MS04ODQ4ODE2YTdhNTEiLCJpZCI6MzI5MzEwLCJpYXQiOjE3NTQ0NzE0Mzd9.EuurwTHYuKDK-CHcjh1a22P4O6ijJNlb6f2qx8fZctA';
 
-    const viewer = new Cesium.Viewer('cesiumContainer', {
-      terrain: Cesium.Terrain.fromWorldTerrain({
-        // requestVertexNormals: true
-      }),
-      terrainExaggeration: 1.0,
-      maximumScreenSpaceError: 1,
-      timeline : false,
-      animation : false,
-      shouldAnimate:true
-    });
-    viewer.scene.globe.enableLighting = true;
-    viewer.scene.globe.depthTestAgainstTerrain = true;
-
-    const offsetSeconds = 10;
-    const now = Cesium.JulianDate.now();
-    const realTimeMinusOffset = Cesium.JulianDate.addSeconds(now, -offsetSeconds, new Cesium.JulianDate());
-    viewer.clock.currentTime = realTimeMinusOffset.clone();
+      const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrain: Cesium.Terrain.fromWorldTerrain({
+          // requestVertexNormals: true
+        }),
+        terrainExaggeration: 1.0,
+        maximumScreenSpaceError: 1,
+        timeline: true,
+        animation: true,
+        shouldAnimate: true
+      });
+      setTimeline(viewer);
+      viewer.scene.globe.enableLighting = true;
+      viewer.scene.globe.depthTestAgainstTerrain = true;
 
     async function loadPaths(){
     //   viewer.scene.primitives.add(
@@ -104,23 +101,42 @@
         reconnectionDelayMax: 5000
     });
 
-    socket.on('data', function(data) {
-      const dataString = JSON.stringify(data, null, 2);
-      const formattedData = dataString.slice(1, -1);
-      document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
+      socket.on('data', async function(data) {
+        const batch = Array.isArray(data) ? data : [data];
+        document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${JSON.stringify(batch, null, 2)}`;
 
-      const { lat, lon, asset_type } = data;
+        let start, end;
+        for (const item of batch) {
+          const time = Cesium.JulianDate.fromDate(new Date(item.timestamp));
+          if (!start || Cesium.JulianDate.lessThan(time, start)) start = time;
+          if (!end || Cesium.JulianDate.greaterThan(time, end)) end = time;
+          await processPoint(item, time);
+        }
 
-      const position = Cesium.Cartesian3.fromDegrees(lon, lat);
-      const clampedPosition = viewer.scene.clampToHeightMostDetailed([position], Array.from(entityMap.values()), 2);
+        if (start && end) {
+          viewer.clock.startTime = start;
+          viewer.clock.stopTime = end;
+          viewer.clock.currentTime = start;
+          viewer.timeline.zoomTo(start, end);
+          viewer.clock.shouldAnimate = true;
+        }
+      });
 
-      clampedPosition.then(([cartesian]) => {
-        if (!cartesian) return
+      async function processPoint(data, time) {
+        const { lat, lon, asset_type } = data;
+        const position = Cesium.Cartesian3.fromDegrees(lon, lat);
+        const [cartesian] = await viewer.scene.clampToHeightMostDetailed(
+          [position],
+          Array.from(entityMap.values()),
+          2
+        );
+        if (!cartesian) return;
         const cartographicPosition = Cesium.Cartographic.fromCartesian(cartesian);
-
-        // if (asset_type === 6) cartographicPosition.height += 43.5;
-        // else cartographicPosition.height += 44.5;
-        const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
+        const adjustedPosition = Cesium.Cartesian3.fromRadians(
+          cartographicPosition.longitude,
+          cartographicPosition.latitude,
+          cartographicPosition.height
+        );
 
         if (!entityMap.has(asset_type)) {
           let modelUri;
@@ -136,63 +152,60 @@
 
           const pos = new Cesium.SampledPositionProperty();
           const velocityOrientation = new Cesium.VelocityOrientationProperty(pos);
-          const fixedRotation = Cesium.Quaternion.IDENTITY; // adjust if model needs a fixed rotation
+          const fixedRotation = Cesium.Quaternion.IDENTITY;
           const orientation = new Cesium.CallbackProperty(function(time, result) {
             const base = velocityOrientation.getValue(time, result);
-            if (!base) return fixedRotation;   // or simply return base
+            if (!base) return fixedRotation;
             return Cesium.Quaternion.multiply(base, fixedRotation, result);
           }, false);
 
-          entityMap.set(asset_type, viewer.entities.add({
-            position: pos,
-            orientation: orientation,
-            model: {
-              uri: modelUri,
-              scale: 3,
-            },
-            label: {
-              text: labelText,
-              font: '14pt sans-serif',
-              fillColor: Cesium.Color.WHITE,
-              outlineColor: Cesium.Color.BLACK,
-              outlineWidth: 2,
-              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-              pixelOffset: new Cesium.Cartesian2(0, -50),
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
-              heightReference: Cesium.HeightReference.NONE,
-              scaleByDistance: new Cesium.NearFarScalar(100, 1.2, 2000, 0.6),
-              translucencyByDistance: new Cesium.NearFarScalar(100, 1.0, 1500, 0.8),
-              backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, 0.7),
-              backgroundPadding: new Cesium.Cartesian2(8, 4),
-              showBackground: true,
-            },
-            path: new Cesium.PathGraphics({
-              leadTime: 0,
-              trailTime: 60,
-              width: 10,
-              material: new Cesium.PolylineGlowMaterialProperty({
-                  glowPower: 1,
-                  color: Cesium.Color.RED
+          entityMap.set(
+            asset_type,
+            viewer.entities.add({
+              position: pos,
+              orientation: orientation,
+              model: {
+                uri: modelUri,
+                scale: 3,
+              },
+              label: {
+                text: labelText,
+                font: '14pt sans-serif',
+                fillColor: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -50),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                heightReference: Cesium.HeightReference.NONE,
+                scaleByDistance: new Cesium.NearFarScalar(100, 1.2, 2000, 0.6),
+                translucencyByDistance: new Cesium.NearFarScalar(100, 1.0, 1500, 0.8),
+                backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, 0.7),
+                backgroundPadding: new Cesium.Cartesian2(8, 4),
+                showBackground: true,
+              },
+              path: new Cesium.PathGraphics({
+                leadTime: 0,
+                trailTime: 60,
+                width: 10,
+                material: new Cesium.PolylineGlowMaterialProperty({
+                    glowPower: 1,
+                    color: Cesium.Color.RED
+                  })
                 })
-              })
-          }));
+            })
+          );
         }
 
         const entity = entityMap.get(asset_type);
-        const now = Cesium.JulianDate.now();
         if (!initializedMap.get(asset_type)) {
-          const past = Cesium.JulianDate.addSeconds(now, -1, new Cesium.JulianDate());
+          const past = Cesium.JulianDate.addSeconds(time, -1, new Cesium.JulianDate());
           entity.position.addSample(past, adjustedPosition);
           initializedMap.set(asset_type, true);
         }
-        entity.position.addSample(now, adjustedPosition);
-
-      })
-      .catch((error) => {
-        console.error('error : ', error)
-      });
-    });
+        entity.position.addSample(time, adjustedPosition);
+      }
 
     socket.on('disconnect', function() {
       console.log('WebSocket connection closed');
