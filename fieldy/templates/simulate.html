@@ -72,6 +72,13 @@
     return Math.round(parseFloat(value));
   }
 
+  // 천 단위 콤마 포맷터 함수 추가
+  function formatNumberWithCommas(value) {
+    const num = parseFloat(value);
+    if (isNaN(num)) return value;
+    return num.toLocaleString('ko-KR');
+  }
+
   const viewer = new Cesium.Viewer('cesiumContainer', {
     terrain: Cesium.Terrain.fromWorldTerrain({
       // requestVertexNormals: true
@@ -377,11 +384,11 @@
       const newRow = tbody2.insertRow();
 
       newRow.insertCell(0).textContent = x;
-      newRow.insertCell(1).innerHTML = x === currentDumpNum ? formatToInteger(data.productivity) : `
+      newRow.insertCell(1).innerHTML = x === currentDumpNum ? formatNumberWithCommas(formatToInteger(data.productivity)) : `
         <div class="spinner-border spinner-border-sm" role="status">
           <span class="visually-hidden">Loading...</span>
         </div>`;
-      newRow.insertCell(2).innerHTML = x === currentDumpNum ? formatToInteger(data.unitCost) : `
+      newRow.insertCell(2).innerHTML = x === currentDumpNum ? formatNumberWithCommas(formatToInteger(data.unitCost)) : `
         <div class="spinner-border spinner-border-sm" role="status">
                     <span class="visually-hidden">Loading...</span>
         </div>`;
@@ -413,8 +420,8 @@
 
       const res2 = await fetch(`/new/{{ project_id }}/prod2?dump=${list[i]}`);
       const result2 = await res2.json();
-      tbody2.rows[i].cells[i === 0 ? 4 : 1].innerText = formatToInteger(result2.productivity);
-      tbody2.rows[i].cells[i === 0 ? 5 : 2].innerText = formatToInteger(result2.unitCost);
+      tbody2.rows[i].cells[i === 0 ? 4 : 1].innerText = formatNumberWithCommas(formatToInteger(result2.productivity));
+      tbody2.rows[i].cells[i === 0 ? 5 : 2].innerText = formatNumberWithCommas(formatToInteger(result2.unitCost));
     }
 
     let i = list.length - 1;
@@ -427,8 +434,8 @@
       newProductivity = formatToInteger(result2.productivity);
       const newRow = tbody2.insertRow();
       newRow.insertCell(0).textContent = lastDumpNum++;
-      newRow.insertCell(1).innerText = newProductivity;
-      newRow.insertCell(2).innerText = formatToInteger(result2.unitCost);
+      newRow.insertCell(1).innerText = formatNumberWithCommas(newProductivity);
+      newRow.insertCell(2).innerText = formatNumberWithCommas(formatToInteger(result2.unitCost));
       // newRow.insertCell(3).innerHTML = `<input type="checkbox" disabled>`;
       console.log([newProductivity, lastProductivity])
       if (newProductivity <= lastProductivity) {
@@ -444,7 +451,8 @@
     // const rows = tbody2.rows;
     let rows = tbody2.querySelectorAll('tr')
     rows.forEach((row, i) => {
-        const value = parseFloat(row.cells[i === 0 ? 4 : 1].innerText);
+        const productivityText = row.cells[4].innerText.replace(/,/g, '');
+        const value = parseFloat(productivityText);
         prodVal.push(value);
 
         if (value > maxVal) {
@@ -462,7 +470,8 @@
     const unitCostVal = [];
 
     rows.forEach((row, i) => {
-        const value = parseFloat(row.cells[i === 0 ? 5 : 2].innerText);
+        const unitCostText = row.cells[5].innerText.replace(/,/g, '');
+        const value = parseFloat(unitCostText);
         unitCostVal.push(value);
 
         if (value < minVal) {
