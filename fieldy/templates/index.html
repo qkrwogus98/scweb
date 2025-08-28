@@ -8,13 +8,13 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/font-kopub@1.0/kopubdotum.min.css">
 <style>
-  .grayscale {
-    filter: grayscale(90%);
+  .logo-white {
+    filter: brightness(0) invert(1);
     transition: filter 0.4s ease;
   }
 
-  .grayscale:hover {
-    filter: grayscale(0%);
+  .logo-white:hover {
+    filter: none;
   }
 
   :root {
@@ -57,7 +57,7 @@
     <div class="table-responsive">
       <table class="table table-hover">
         <thead>
-          <tr>
+          <tr class="text-light">
             <th scope="col">#</th>
             <th scope="col">이름</th>
             <th scope="col">마지막 수정</th>
@@ -87,7 +87,7 @@
     <p class="col-md-4 mb-0 text-white">&copy; 2023 CIC Lab.</p>
 
     <div class="col-md-4 d-flex align-items-center justify-content-center mb-3 mb-md-0 me-md-auto">
-      <a href="http://www.smartconstruction.kr/" target="_blank" class="grayscale">
+      <a href="http://www.smartconstruction.kr/" target="_blank" class="logo-white">
         <img src="{{ url_for('static', filename='smartconstruction_logo.png') }}" height="34" alt="스마트건설사업단 로고">
       </a>
     </div>
