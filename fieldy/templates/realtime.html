@@ -83,16 +83,18 @@
     viewer.clock.currentTime = realTimeMinusOffset.clone();
 
     async function loadPaths(){
-      const res = await fetch('/api/v0/projects/50');
-      const data = await res.json();
-      console.log('data : ', data);
-      const og_tileset = 'https://fieldy.cdn.ntruss.com/sc/8-3/tileset.json'
-      const tileset = viewer.scene.primitives.add(await Cesium.Cesium3DTileset.fromUrl(og_tileset));
-      console.log('tileset : ', tileset)
+    //   viewer.scene.primitives.add(
+    //     await Cesium.Cesium3DTileset.fromUrl(
+    //         "https://tile.googleapis.com/v1/3dtiles/root.json?key=AIzaSyAUOmqO5TvPPYAPN_R68vU_20P2qrOcLdo"
+    //     )
+    // );
+      const osmBuildings = await Cesium.Cesium3DTileset.fromIonAssetId(96188);
+      viewer.scene.primitives.add(osmBuildings);
     }
 
     loadPaths();
     const entityMap = new Map();
+    const initializedMap = new Map();
 
     const socket = io.connect(window.location.protocol + '//' + window.location.host, {
         secure: window.location.protocol === 'https:',
@@ -107,30 +109,43 @@
       const formattedData = dataString.slice(1, -1);
       document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
 
-      const position = Cesium.Cartesian3.fromDegrees(data.lng, data.lat);
-      const clampedPosition = viewer.scene.clampToHeightMostDetailed(position,Array.from(entityMap.values()),2);
+      const { lat, lon, asset_type } = data;
 
-      clampedPosition.then((updatedCartesians) => {
-        const cartographicPosition = Cesium.Cartographic.fromCartesian(updatedCartesians);
-	
-        if(data.asset_type === 6) cartographicPosition.height += 43.5;
-        else cartographicPosition.height += 44.5;
+      const position = Cesium.Cartesian3.fromDegrees(lon, lat);
+      const clampedPosition = viewer.scene.clampToHeightMostDetailed([position], Array.from(entityMap.values()), 2);
+
+      clampedPosition.then(([cartesian]) => {
+        if (!cartesian) return
+        const cartographicPosition = Cesium.Cartographic.fromCartesian(cartesian);
+
+        // if (asset_type === 6) cartographicPosition.height += 43.5;
+        // else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
-        if (!entityMap.has(data.asset_type)) {
+
+        if (!entityMap.has(asset_type)) {
           let modelUri;
           let labelText;
-          	
-          if (data.asset_type === 6) {
+
+          if (asset_type === 6) {
             modelUri = './static/assets/dump_truck.glb';
             labelText = '덤프 트럭';
           } else {
             modelUri = './static/assets/dozer.glb';
-            labelText = data.asset_type === 1 ? '불도저' : '그레이더';
+            labelText = asset_type === 1 ? '불도저' : '그레이더';
           }
 
-          entityMap.set(data.asset_type, viewer.entities.add({
-            position: new Cesium.SampledPositionProperty(),
-            orientation: new Cesium.SampledProperty(Cesium.Quaternion),
+          const pos = new Cesium.SampledPositionProperty();
+          const velocityOrientation = new Cesium.VelocityOrientationProperty(pos);
+          const fixedRotation = Cesium.Quaternion.IDENTITY; // adjust if model needs a fixed rotation
+          const orientation = new Cesium.CallbackProperty(function(time, result) {
+            const base = velocityOrientation.getValue(time, result);
+            if (!base) return fixedRotation;   // or simply return base
+            return Cesium.Quaternion.multiply(base, fixedRotation, result);
+          }, false);
+
+          entityMap.set(asset_type, viewer.entities.add({
+            position: pos,
+            orientation: orientation,
             model: {
               uri: modelUri,
               scale: 3,
@@ -143,9 +158,16 @@
               outlineWidth: 2,
               style: Cesium.LabelStyle.FILL_AND_OUTLINE,
               verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-              pixelOffset: new Cesium.Cartesian2(0, -20),
+              pixelOffset: new Cesium.Cartesian2(0, -50),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              heightReference: Cesium.HeightReference.NONE,
+              scaleByDistance: new Cesium.NearFarScalar(100, 1.2, 2000, 0.6),
+              translucencyByDistance: new Cesium.NearFarScalar(100, 1.0, 1500, 0.8),
+              backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, 0.7),
+              backgroundPadding: new Cesium.Cartesian2(8, 4),
+              showBackground: true,
             },
-      	    path: new Cesium.PathGraphics({
+            path: new Cesium.PathGraphics({
               leadTime: 0,
               trailTime: 60,
               width: 10,
@@ -155,14 +177,20 @@
                 })
               })
           }));
-        } 
-        const entity = entityMap.get(data.asset_type);
-        const hpr = new Cesium.HeadingPitchRoll.fromDegrees(data.heading, 0, 0);
-        const orientation = Cesium.Transforms.headingPitchRollQuaternion(adjustedPosition, hpr);
+        }
+
+        const entity = entityMap.get(asset_type);
         const now = Cesium.JulianDate.now();
-        entity.position.addSample(now,adjustedPosition);
-        entity.orientation.addSample(now,orientation);
-        
+        if (!initializedMap.get(asset_type)) {
+          const past = Cesium.JulianDate.addSeconds(now, -1, new Cesium.JulianDate());
+          entity.position.addSample(past, adjustedPosition);
+          initializedMap.set(asset_type, true);
+        }
+        entity.position.addSample(now, adjustedPosition);
+
+      })
+      .catch((error) => {
+        console.error('error : ', error)
       });
     });
 
@@ -180,6 +208,7 @@
 
     const projects = [
       { name: '김포-파주 실증 현장', address: '경기도 김포시 양촌읍 흥신리 193-174', lat: 37.6754867, lon: 126.6303532 },
+      { name: '파주 고속도로', address: '경기도 파주시 법원읍 보광로 1704-74', lat: 37.8296017, lon: 126.8712626 }
       // Add more projects as needed
     ];
 
