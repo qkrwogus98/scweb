@@ -451,7 +451,7 @@
     // const rows = tbody2.rows;
     let rows = tbody2.querySelectorAll('tr')
     rows.forEach((row, i) => {
-        const productivityText = row.cells[4].innerText.replace(/,/g, '');
+        const productivityText = row.cells[i == 0 ? 4 : 1].innerText.replace(/,/g, '');
         const value = parseFloat(productivityText);
         prodVal.push(value);
 
@@ -470,7 +470,7 @@
     const unitCostVal = [];
 
     rows.forEach((row, i) => {
-        const unitCostText = row.cells[5].innerText.replace(/,/g, '');
+        const unitCostText = row.cells[i == 0 ? 5 : 2].innerText.replace(/,/g, '');
         const value = parseFloat(unitCostText);
         unitCostVal.push(value);
 
