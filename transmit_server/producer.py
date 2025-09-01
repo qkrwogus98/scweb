@@ -10,7 +10,7 @@ BOOTSTRAP_SERVERS = 'localhost:9092'
 # Kafka 토픽 이름
 TOPIC_NAME = 'data_topic'
 # 전송할 엑셀 파일 이름
-EXCEL_FILE_NAME = 'truck_gps_0915-16.xlsx'  # 전송할 엑셀 파일 이름으로 변경하세요.
+EXCEL_FILE_NAME = 'truck.xlsx'  # 전송할 엑셀 파일 이름으로 변경하세요.
 # 데이터 전송 간격 (초)
 SEND_INTERVAL_SECONDS = 1
 # --------------------

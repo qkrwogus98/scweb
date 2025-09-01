@@ -70,14 +70,14 @@
       }),
       terrainExaggeration: 1.0,
       maximumScreenSpaceError: 1,
-      timeline : false,
-      animation : false,
+      timeline : true,
+      animation : true,
       shouldAnimate:true
     });
     viewer.scene.globe.enableLighting = true;
     viewer.scene.globe.depthTestAgainstTerrain = true;
 
-    const offsetSeconds = 10;
+    const offsetSeconds = 3;
     const now = Cesium.JulianDate.now();
     const realTimeMinusOffset = Cesium.JulianDate.addSeconds(now, -offsetSeconds, new Cesium.JulianDate());
     viewer.clock.currentTime = realTimeMinusOffset.clone();
@@ -125,6 +125,7 @@
         if (!entityMap.has(asset_type)) {
           let modelUri;
           let labelText;
+          let baseScale = 3;
 
           if (asset_type === 6) {
             modelUri = './static/assets/dump_truck.glb';
@@ -148,7 +149,9 @@
             orientation: orientation,
             model: {
               uri: modelUri,
-              scale: 3,
+              scale: baseScale,
+              minimumPixelSize: 64,
+              maximumScale: baseScale * 50,
             },
             label: {
               text: labelText,
