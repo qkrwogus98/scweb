@@ -77,7 +77,7 @@
     viewer.scene.globe.enableLighting = true;
     viewer.scene.globe.depthTestAgainstTerrain = true;
 
-    const offsetSeconds = 10;
+    const offsetSeconds = 3;
     const now = Cesium.JulianDate.now();
     const realTimeMinusOffset = Cesium.JulianDate.addSeconds(now, -offsetSeconds, new Cesium.JulianDate());
     viewer.clock.currentTime = realTimeMinusOffset.clone();
