@@ -14,6 +14,11 @@ const viewer = new Cesium.Viewer('cesiumContainer', {
 });
 viewer.scene.globe.enableLighting = true;
 
+const controller = viewer.scene.screenSpaceCameraController;
+controller.enableTranslate = true;
+controller.enableTilt = true;
+controller.inertiaTranslate = 0.9;
+
 setTimeline(viewer);
 
 const dataSourcePromise = Cesium.CzmlDataSource.load(
@@ -55,23 +60,38 @@ viewer.dataSources.add(dataSourcePromise).then(function (dataSource) {
 });
 
 function start() {
+  viewer.trackedEntity = undefined;
   viewer.clock.shouldAnimate = true;
-  viewer.scene.postRender.addEventListener(() => {
-    const zOffset = 5;  // z+ offset for CAT_785C.glb model
+
+  let lastUpdate = Cesium.JulianDate.now();
+  const updateIntervalSeconds = 0.5;
+
+  viewer.clock.onTick.addEventListener((clock) => {
+    const currentTime = clock.currentTime;
+    if (Cesium.JulianDate.secondsDifference(currentTime, lastUpdate) < updateIntervalSeconds) {
+      return;
+    }
+    lastUpdate = currentTime;
+
+    const zOffset = 5; // z+ offset for CAT_785C.glb model
 
     entities.forEach((entity, i) => {
       try {
-        const position = positionProperties[i].getValue(viewer.clock.currentTime);
-        // TODO: czml 만들때 시간 position 부분 꽉 채우기
+        const position = positionProperties[i].getValue(currentTime);
         const clampedPosition = viewer.scene.clampToHeight(position, entities);
-        if (!Cesium.defined(clampedPosition))
-          return
+        if (!Cesium.defined(clampedPosition)) {
+          return;
+        }
         const cartographicPosition = Cesium.Cartographic.fromCartesian(clampedPosition);
         cartographicPosition.height += zOffset;
-        const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
+        const adjustedPosition = Cesium.Cartesian3.fromRadians(
+          cartographicPosition.longitude,
+          cartographicPosition.latitude,
+          cartographicPosition.height
+        );
         entity.position = adjustedPosition;
       } catch (e) {
-        // console.log(e, viewer.clock.currentTime);
+        // console.log(e, currentTime);
       }
     });
   });
@@ -154,8 +174,6 @@ const entity3 = viewer.entities.add({
   //   scale: 0.2
   // }
 });
-viewer.trackedEntity = entities[2]
-
 
 const tileset = await Cesium.Cesium3DTileset.fromUrl(
   '/assets/hanwha1/tileset.json'
