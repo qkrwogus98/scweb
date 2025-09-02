@@ -161,8 +161,6 @@
         if (!cartesian) return
         const cartographicPosition = Cesium.Cartographic.fromCartesian(cartesian);
 
-        if (asset_type !== 6) cartographicPosition.height += 5;
-        // else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
 
         if (!entityMap.has(asset_type)) {
