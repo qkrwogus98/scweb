@@ -175,10 +175,28 @@
           });
           const velocityOrientation = new Cesium.VelocityOrientationProperty(pos);
           const fixedRotation = Cesium.Quaternion.IDENTITY; // adjust if model needs a fixed rotation
+          let lastOrientation;
+          let lastCartographic;
           const orientation = new Cesium.CallbackProperty(function(time, result) {
+            const position = pos.getValue(time);
+            if (!Cesium.defined(position)) {
+              return lastOrientation || fixedRotation;
+            }
+            const carto = Cesium.Cartographic.fromCartesian(position);
+            if (
+              lastCartographic &&
+              Cesium.Math.equalsEpsilon(carto.longitude, lastCartographic.longitude, Cesium.Math.EPSILON7) &&
+              Cesium.Math.equalsEpsilon(carto.latitude, lastCartographic.latitude, Cesium.Math.EPSILON7)
+            ) {
+              return lastOrientation || fixedRotation;
+            }
             const base = velocityOrientation.getValue(time, result);
-            if (!base) return fixedRotation;   // or simply return base
-            return Cesium.Quaternion.multiply(base, fixedRotation, result);
+            if (!Cesium.defined(base)) {
+              return lastOrientation || fixedRotation;
+            }
+            lastOrientation = Cesium.Quaternion.multiply(base, fixedRotation, result);
+            lastCartographic = carto;
+            return lastOrientation;
           }, false);
 
           entityMap.set(asset_type, viewer.entities.add({
@@ -273,7 +291,5 @@
       });
     });
   </script>
-
-  <!--script src="/static/js/new.js"></script-->
 </body>
 </html>
