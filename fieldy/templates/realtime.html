@@ -60,6 +60,7 @@
   <div id="cesiumContainer"></div>
   <div id="projectSelector"></div>
   <div id="dataDisplay" style="position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); padding: 10px; color: white; border-radius: 10px;">Waiting for data...</div>
+  <button id="liveButton" style="position: absolute; top: 10px; left: 150px; z-index: 5;" class="btn btn-light">Live</button>
   <script>
     Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMjM0YTQ5OS01MTgwLTRjODItYTk0MS04ODQ4ODE2YTdhNTEiLCJpZCI6MzI5MzEwLCJpYXQiOjE3NTQ0NzE0Mzd9.EuurwTHYuKDK-CHcjh1a22P4O6ijJNlb6f2qx8fZctA';
 
@@ -111,6 +112,15 @@
       userScrubbing = true;
       viewer.clock.currentTime = e.timeJulian;
       viewer.clock.shouldAnimate = false;
+    });
+
+    document.getElementById('liveButton').addEventListener('click', function(){
+      userScrubbing = false;
+      if (stopTime) {
+        viewer.clock.currentTime = stopTime.clone();
+      }
+      viewer.clock.shouldAnimate = true;
+      viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
     });
 
     socket.on('data', function(data) {
@@ -173,6 +183,8 @@
             interpolationDegree: 1,
             interpolationAlgorithm: Cesium.LagrangePolynomialApproximation
           });
+          pos.forwardExtrapolationDuration = 30;
+          pos.backwardExtrapolationDuration = 30;
           const velocityOrientation = new Cesium.VelocityOrientationProperty(pos);
           const fixedRotation = Cesium.Quaternion.IDENTITY; // adjust if model needs a fixed rotation
           let lastOrientation;
