@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 import traceback
 from flask import jsonify
+from datetime import datetime, timezone
 
 load_dotenv()
 
@@ -55,6 +56,13 @@ def kafka_listener():
     try:
         for message in consumer:
             data = message.value
+            raw_date = data.get('Date')
+            if raw_date:
+                try:
+                    dt = datetime.strptime(raw_date, '%Y-%m-%d %H:%M:%S')
+                    data['Date'] = dt.replace(tzinfo=timezone.utc).isoformat()
+                except ValueError:
+                    pass
             socketio.emit('data', data)
             socketio.sleep(0)
             if active_clients == 0:

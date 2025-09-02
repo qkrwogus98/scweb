@@ -60,7 +60,6 @@
   <div id="cesiumContainer"></div>
   <div id="projectSelector"></div>
   <div id="dataDisplay" style="position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); padding: 10px; color: white; border-radius: 10px;">Waiting for data...</div>
-
   <script>
     Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMjM0YTQ5OS01MTgwLTRjODItYTk0MS04ODQ4ODE2YTdhNTEiLCJpZCI6MzI5MzEwLCJpYXQiOjE3NTQ0NzE0Mzd9.EuurwTHYuKDK-CHcjh1a22P4O6ijJNlb6f2qx8fZctA';
 
@@ -95,6 +94,10 @@
     loadPaths();
     const entityMap = new Map();
     const initializedMap = new Map();
+    let startTime;
+    let stopTime;
+    let userScrubbing = false;
+    let firstSample = true;
 
     const socket = io.connect(window.location.protocol + '//' + window.location.host, {
         secure: window.location.protocol === 'https:',
@@ -104,12 +107,42 @@
         reconnectionDelayMax: 5000
     });
 
+    viewer.timeline.addEventListener('settime', function(e){
+      userScrubbing = true;
+      viewer.clock.currentTime = e.timeJulian;
+      viewer.clock.shouldAnimate = false;
+    });
+
     socket.on('data', function(data) {
       const dataString = JSON.stringify(data, null, 2);
       const formattedData = dataString.slice(1, -1);
       document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
 
-      const { lat, lon, asset_type } = data;
+      const { lat, lon, asset_type, Date: rawDate } = data;
+      const iso = rawDate ? luxon.DateTime.fromFormat(rawDate, 'yyyy-MM-dd HH:mm:ss', { zone: 'utc' }).toISO() : null;
+      const sampleTime = iso ? Cesium.JulianDate.fromIso8601(iso) : Cesium.JulianDate.now();
+
+      let boundsChanged = false;
+      if (!startTime || Cesium.JulianDate.lessThan(sampleTime, startTime)) {
+        startTime = sampleTime.clone();
+        boundsChanged = true;
+      }
+      if (!stopTime || Cesium.JulianDate.greaterThan(sampleTime, stopTime)) {
+        stopTime = sampleTime.clone();
+        boundsChanged = true;
+      }
+      viewer.clock.startTime = startTime.clone();
+      viewer.clock.stopTime = stopTime.clone();
+      if (firstSample && !userScrubbing) {
+        viewer.clock.currentTime = sampleTime.clone();
+        firstSample = false;
+      }
+      if (!userScrubbing && boundsChanged) {
+        viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
+      }
+      if (!userScrubbing) {
+        viewer.clock.shouldAnimate = true;
+      }
 
       const position = Cesium.Cartesian3.fromDegrees(lon, lat);
       const clampedPosition = viewer.scene.clampToHeightMostDetailed([position], Array.from(entityMap.values()), 2);
@@ -136,6 +169,10 @@
           }
 
           const pos = new Cesium.SampledPositionProperty();
+          pos.setInterpolationOptions({
+            interpolationDegree: 1,
+            interpolationAlgorithm: Cesium.LagrangePolynomialApproximation
+          });
           const velocityOrientation = new Cesium.VelocityOrientationProperty(pos);
           const fixedRotation = Cesium.Quaternion.IDENTITY; // adjust if model needs a fixed rotation
           const orientation = new Cesium.CallbackProperty(function(time, result) {
@@ -183,13 +220,12 @@
         }
 
         const entity = entityMap.get(asset_type);
-        const now = Cesium.JulianDate.now();
         if (!initializedMap.get(asset_type)) {
-          const past = Cesium.JulianDate.addSeconds(now, -1, new Cesium.JulianDate());
+          const past = Cesium.JulianDate.addSeconds(sampleTime, -1, new Cesium.JulianDate());
           entity.position.addSample(past, adjustedPosition);
           initializedMap.set(asset_type, true);
         }
-        entity.position.addSample(now, adjustedPosition);
+        entity.position.addSample(sampleTime, adjustedPosition);
 
       })
       .catch((error) => {
