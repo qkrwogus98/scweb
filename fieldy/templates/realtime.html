@@ -128,7 +128,7 @@
       const formattedData = dataString.slice(1, -1);
       document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
 
-      const { lat, lon, asset_type, Date: rawDate } = data;
+      const { lat, lon, asset_type, Date: rawDate, equip_id } = data;
       const iso = rawDate ? luxon.DateTime.fromFormat(rawDate, 'yyyy-MM-dd HH:mm:ss', { zone: 'utc' }).toISO() : null;
       const sampleTime = iso ? Cesium.JulianDate.fromIso8601(iso) : Cesium.JulianDate.now();
 
@@ -164,7 +164,7 @@
         // else cartographicPosition.height += 44.5;
         const adjustedPosition = Cesium.Cartesian3.fromRadians(cartographicPosition.longitude, cartographicPosition.latitude, cartographicPosition.height);
 
-        if (!entityMap.has(asset_type)) {
+        if (!entityMap.has(equip_id)) {
           let modelUri;
           let labelText;
           let baseScale = 3;
@@ -210,7 +210,7 @@
             return lastOrientation;
           }, false);
 
-          entityMap.set(asset_type, viewer.entities.add({
+          entityMap.set(equip_id, viewer.entities.add({
             position: pos,
             orientation: orientation,
             model: {
@@ -248,11 +248,11 @@
           }));
         }
 
-        const entity = entityMap.get(asset_type);
-        if (!initializedMap.get(asset_type)) {
+        const entity = entityMap.get(equip_id);
+        if (!initializedMap.get(equip_id)) {
           const past = Cesium.JulianDate.addSeconds(sampleTime, -1, new Cesium.JulianDate());
           entity.position.addSample(past, adjustedPosition);
-          initializedMap.set(asset_type, true);
+          initializedMap.set(equip_id, true);
         }
         entity.position.addSample(sampleTime, adjustedPosition);
 
