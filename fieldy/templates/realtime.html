@@ -95,6 +95,8 @@
     loadPaths();
     const entityMap = new Map();
     const initializedMap = new Map();
+    let startTime;
+    let stopTime;
 
     const socket = io.connect(window.location.protocol + '//' + window.location.host, {
         secure: window.location.protocol === 'https:',
@@ -112,6 +114,18 @@
       const { lat, lon, asset_type, Date: rawDate } = data;
       const iso = rawDate ? luxon.DateTime.fromFormat(rawDate, 'yyyy-MM-dd HH:mm:ss', { zone: 'utc' }).toISO() : null;
       const sampleTime = iso ? Cesium.JulianDate.fromIso8601(iso) : Cesium.JulianDate.now();
+      
+      if (!startTime || Cesium.JulianDate.lessThan(sampleTime, startTime)) {
+        startTime = sampleTime.clone();
+      }
+      if (!stopTime || Cesium.JulianDate.greaterThan(sampleTime, stopTime)) {
+        stopTime = sampleTime.clone();
+      }
+      viewer.clock.startTime = startTime.clone();
+      viewer.clock.stopTime = stopTime.clone();
+      viewer.clock.currentTime = sampleTime.clone();
+      viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
+      viewer.clock.shouldAnimate = false;
 
       const position = Cesium.Cartesian3.fromDegrees(lon, lat);
       const clampedPosition = viewer.scene.clampToHeightMostDetailed([position], Array.from(entityMap.values()), 2);
@@ -185,6 +199,9 @@
         }
 
         const entity = entityMap.get(asset_type);
+        if (!viewer.trackedEntity) {
+          viewer.trackedEntity = entity;
+        }
         if (!initializedMap.get(asset_type)) {
           const past = Cesium.JulianDate.addSeconds(sampleTime, -1, new Cesium.JulianDate());
           entity.position.addSample(past, adjustedPosition);
