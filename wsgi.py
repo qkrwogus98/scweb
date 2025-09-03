@@ -56,10 +56,26 @@ def kafka_listener():
     try:
         for message in consumer:
             data = message.value
+            if data.get('type') == 'meta':
+                start_iso = data.get('start')
+                end_iso = data.get('end')
+                try:
+                    bounds = {}
+                    if start_iso:
+                        start_dt = datetime.fromisoformat(start_iso)
+                        bounds['start'] = start_dt.replace(tzinfo=timezone.utc).isoformat()
+                    if end_iso:
+                        end_dt = datetime.fromisoformat(end_iso)
+                        bounds['end'] = end_dt.replace(tzinfo=timezone.utc).isoformat()
+                    socketio.emit('timeline_bounds', bounds)
+                except ValueError:
+                    pass
+                socketio.sleep(0)
+                continue
             raw_date = data.get('Date')
             if raw_date:
                 try:
-                    dt = datetime.strptime(raw_date, '%Y-%m-%d %H:%M:%S')
+                    dt = datetime.fromisoformat(raw_date)
                     data['Date'] = dt.replace(tzinfo=timezone.utc).isoformat()
                 except ValueError:
                     pass
@@ -116,9 +132,9 @@ if __name__ == "__main__":
     print(f"Debug mode: {debug}")
     
     socketio.run(
-        app, 
-        host=server_ip, 
-        port=port, 
+        app,
+        host=server_ip,
+        port=port,
         debug=debug,
         use_reloader=False  # 리로더 비활성화로 안정성 향상
     )

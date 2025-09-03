@@ -112,13 +112,29 @@
       viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
     });
 
+    socket.on('timeline_bounds', function(bounds) {
+      const { start, end } = bounds;
+      if (start) {
+        startTime = Cesium.JulianDate.fromIso8601(start);
+        viewer.clock.startTime = startTime.clone();
+        viewer.clock.currentTime = startTime.clone();
+      }
+      if (end) {
+        stopTime = Cesium.JulianDate.fromIso8601(end);
+        viewer.clock.stopTime = stopTime.clone();
+      }
+      if (startTime && stopTime) {
+        viewer.timeline.zoomTo(startTime, stopTime);
+      }
+    });
+
     socket.on('data', function(data) {
       const dataString = JSON.stringify(data, null, 2);
       const formattedData = dataString.slice(1, -1);
       document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
 
       const { lat, lon, asset_type, Date: rawDate, equip_id, heading } = data;
-      const iso = rawDate ? luxon.DateTime.fromFormat(rawDate, 'yyyy-MM-dd HH:mm:ss', { zone: 'utc' }).toISO() : null;
+      const iso = rawDate ? luxon.DateTime.fromISO(rawDate, { zone: 'utc' }).toISO() : null;
       const sampleTime = iso ? Cesium.JulianDate.fromIso8601(iso) : Cesium.JulianDate.now();
 
       let boundsChanged = false;
