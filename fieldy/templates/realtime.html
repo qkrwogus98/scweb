@@ -171,10 +171,13 @@
             interpolationDegree: 1,
             interpolationAlgorithm: Cesium.LagrangePolynomialApproximation
           });
-          pos.forwardExtrapolationDuration = 30;
+          pos.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+          pos.forwardExtrapolationDuration = 0;
           pos.backwardExtrapolationDuration = 30;
           
           const orientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
+          orientationProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+          orientationProp.forwardExtrapolationDuration = 0;
           entityMap.set(equip_id, viewer.entities.add({
             position: pos,
             orientation: orientationProp,
