@@ -10,7 +10,7 @@ BOOTSTRAP_SERVERS = 'localhost:9092'
 # Kafka 토픽 이름
 TOPIC_NAME = 'data_topic'
 # 전송할 엑셀 파일 이름
-EXCEL_FILE_NAME = 'truck.xlsx'  # 전송할 엑셀 파일 이름으로 변경하세요.
+EXCEL_FILE_NAME = 'real_truck_2.xlsx'  # 전송할 엑셀 파일 이름으로 변경하세요.
 # 데이터 전송 간격 (초)
 SEND_INTERVAL_SECONDS = 1
 # --------------------
@@ -34,6 +34,18 @@ def send_data_from_excel(producer, topic, file_path):
         # 엑셀 파일 읽기
         data = pd.read_excel(file_path)
         print(f"'{file_path}' 파일에서 총 {len(data)}개의 행을 읽었습니다.")
+
+        # 타임라인 범위(meta 정보) 전송
+        if 'Date' in data.columns:
+            start_ts = data['Date'].min()
+            end_ts = data['Date'].max()
+            meta_msg = {
+                'type': 'meta',
+                'start': start_ts.isoformat() if not pd.isna(start_ts) else None,
+                'end': end_ts.isoformat() if not pd.isna(end_ts) else None
+            }
+            producer.send(topic, meta_msg)
+            print(f"타임라인 범위 전송: {meta_msg}")
 
         # 데이터프레임의 각 행을 순회하며 데이터 전송
         for index, row in data.iterrows():

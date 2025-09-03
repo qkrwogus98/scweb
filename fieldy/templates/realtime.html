@@ -82,17 +82,6 @@
     const realTimeMinusOffset = Cesium.JulianDate.addSeconds(now, -offsetSeconds, new Cesium.JulianDate());
     viewer.clock.currentTime = realTimeMinusOffset.clone();
 
-    async function loadPaths(){
-    //   viewer.scene.primitives.add(
-    //     await Cesium.Cesium3DTileset.fromUrl(
-    //         "https://tile.googleapis.com/v1/3dtiles/root.json?key=AIzaSyAUOmqO5TvPPYAPN_R68vU_20P2qrOcLdo"
-    //     )
-    // );
-      const osmBuildings = await Cesium.Cesium3DTileset.fromIonAssetId(96188);
-      viewer.scene.primitives.add(osmBuildings);
-    }
-
-    loadPaths();
     const entityMap = new Map();
     const initializedMap = new Map();
     let startTime;
@@ -123,13 +112,29 @@
       viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
     });
 
+    socket.on('timeline_bounds', function(bounds) {
+      const { start, end } = bounds;
+      if (start) {
+        startTime = Cesium.JulianDate.fromIso8601(start);
+        viewer.clock.startTime = startTime.clone();
+        viewer.clock.currentTime = startTime.clone();
+      }
+      if (end) {
+        stopTime = Cesium.JulianDate.fromIso8601(end);
+        viewer.clock.stopTime = stopTime.clone();
+      }
+      if (startTime && stopTime) {
+        viewer.timeline.zoomTo(startTime, stopTime);
+      }
+    });
+
     socket.on('data', function(data) {
       const dataString = JSON.stringify(data, null, 2);
       const formattedData = dataString.slice(1, -1);
       document.getElementById('dataDisplay').innerText = `[수신 데이터]\n${formattedData}`;
 
-      const { lat, lon, asset_type, Date: rawDate, equip_id } = data;
-      const iso = rawDate ? luxon.DateTime.fromFormat(rawDate, 'yyyy-MM-dd HH:mm:ss', { zone: 'utc' }).toISO() : null;
+      const { lat, lon, asset_type, Date: rawDate, equip_id, heading } = data;
+      const iso = rawDate ? luxon.DateTime.fromISO(rawDate, { zone: 'utc' }).toISO() : null;
       const sampleTime = iso ? Cesium.JulianDate.fromIso8601(iso) : Cesium.JulianDate.now();
 
       let boundsChanged = false;
@@ -170,7 +175,7 @@
           let baseScale = 3;
 
           if (asset_type === 6) {
-            modelUri = './static/assets/dump_truck.glb';
+            modelUri = './static/assets/dump_truck_new.glb';
             labelText = '덤프 트럭';
           } else {
             modelUri = './static/assets/dozer.glb';
@@ -182,45 +187,25 @@
             interpolationDegree: 1,
             interpolationAlgorithm: Cesium.LagrangePolynomialApproximation
           });
-          pos.forwardExtrapolationDuration = 30;
+          pos.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+          pos.forwardExtrapolationDuration = 0;
           pos.backwardExtrapolationDuration = 30;
-          const velocityOrientation = new Cesium.VelocityOrientationProperty(pos);
-          const fixedRotation = Cesium.Quaternion.IDENTITY; // adjust if model needs a fixed rotation
-          let lastOrientation;
-          let lastCartographic;
-          const orientation = new Cesium.CallbackProperty(function(time, result) {
-            const position = pos.getValue(time);
-            if (!Cesium.defined(position)) {
-              return lastOrientation || fixedRotation;
-            }
-            const carto = Cesium.Cartographic.fromCartesian(position);
-            if (
-              lastCartographic &&
-              Cesium.Math.equalsEpsilon(carto.longitude, lastCartographic.longitude, Cesium.Math.EPSILON7) &&
-              Cesium.Math.equalsEpsilon(carto.latitude, lastCartographic.latitude, Cesium.Math.EPSILON7)
-            ) {
-              return lastOrientation || fixedRotation;
-            }
-            const base = velocityOrientation.getValue(time, result);
-            if (!Cesium.defined(base)) {
-              return lastOrientation || fixedRotation;
-            }
-            lastOrientation = Cesium.Quaternion.multiply(base, fixedRotation, result);
-            lastCartographic = carto;
-            return lastOrientation;
-          }, false);
-
+          
+          const orientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
+          orientationProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+          orientationProp.forwardExtrapolationDuration = 0;
           entityMap.set(equip_id, viewer.entities.add({
             position: pos,
-            orientation: orientation,
+            orientation: orientationProp,
             model: {
               uri: modelUri,
               scale: baseScale,
               minimumPixelSize: 64,
               maximumScale: baseScale * 50,
+              // heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
             },
             label: {
-              text: labelText,
+              text: `${labelText} ${equip_id}`,
               font: '14pt sans-serif',
               fillColor: Cesium.Color.WHITE,
               outlineColor: Cesium.Color.BLACK,
@@ -249,12 +234,19 @@
         }
 
         const entity = entityMap.get(equip_id);
+        const headingRadians = Cesium.Math.toRadians(heading|| 0) - Cesium.Math.PI_OVER_TWO;
+        const quaternion = Cesium.Transforms.headingPitchRollQuaternion(
+          adjustedPosition,
+          new Cesium.HeadingPitchRoll(headingRadians, 0, 0)
+        );
         if (!initializedMap.get(equip_id)) {
           const past = Cesium.JulianDate.addSeconds(sampleTime, -1, new Cesium.JulianDate());
           entity.position.addSample(past, adjustedPosition);
+          entity.orientation.addSample(past, quaternion);
           initializedMap.set(equip_id, true);
         }
         entity.position.addSample(sampleTime, adjustedPosition);
+        entity.orientation.addSample(sampleTime, quaternion);
 
       })
       .catch((error) => {
