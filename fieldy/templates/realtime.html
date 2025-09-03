@@ -175,7 +175,7 @@
           let baseScale = 3;
 
           if (asset_type === 6) {
-            modelUri = './static/assets/dump_truck.glb';
+            modelUri = './static/assets/dump_truck_new.glb';
             labelText = '덤프 트럭';
           } else {
             modelUri = './static/assets/dozer.glb';
@@ -202,10 +202,10 @@
               scale: baseScale,
               minimumPixelSize: 64,
               maximumScale: baseScale * 50,
-              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+              // heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
             },
             label: {
-              text: labelText,
+              text: `${labelText} ${equip_id}`,
               font: '14pt sans-serif',
               fillColor: Cesium.Color.WHITE,
               outlineColor: Cesium.Color.BLACK,
