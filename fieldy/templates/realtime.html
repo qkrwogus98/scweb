@@ -81,13 +81,14 @@
     const now = Cesium.JulianDate.now();
     const realTimeMinusOffset = Cesium.JulianDate.addSeconds(now, -offsetSeconds, new Cesium.JulianDate());
     viewer.clock.currentTime = realTimeMinusOffset.clone();
+    viewer.clock.shouldAnimate = false;
 
     const entityMap = new Map();
     const initializedMap = new Map();
     let startTime;
     let stopTime;
     let userScrubbing = false;
-    let firstSample = true;
+    let noDataTimer;
 
     const socket = io.connect(window.location.protocol + '//' + window.location.host, {
         secure: window.location.protocol === 'https:',
@@ -148,16 +149,20 @@
       }
       viewer.clock.startTime = startTime.clone();
       viewer.clock.stopTime = stopTime.clone();
-      if (firstSample && !userScrubbing) {
+      if (!userScrubbing) {
         viewer.clock.currentTime = sampleTime.clone();
-        firstSample = false;
+        viewer.clock.shouldAnimate = true;
       }
       if (!userScrubbing && boundsChanged) {
         viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
       }
-      if (!userScrubbing) {
-        viewer.clock.shouldAnimate = true;
-      }
+
+      clearTimeout(noDataTimer);
+      noDataTimer = setTimeout(() => {
+        if (!userScrubbing) {
+          viewer.clock.shouldAnimate = false;
+        }
+      }, offsetSeconds * 1000);
 
       const position = Cesium.Cartesian3.fromDegrees(lon, lat);
       const clampedPosition = viewer.scene.clampToHeightMostDetailed([position], Array.from(entityMap.values()), 2);
