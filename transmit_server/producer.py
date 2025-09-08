@@ -2,17 +2,12 @@ import time
 import os
 import json
 import pandas as pd
+import argparse
 from kafka import KafkaProducer
 
 # --- 사용자 설정 ---
 # Kafka 서버 주소
 BOOTSTRAP_SERVERS = 'localhost:9092'
-# Kafka 토픽 이름
-TOPIC_NAME = 'data_topic'
-# 전송할 엑셀 파일 이름
-EXCEL_FILE_NAME = 'real_truck_2.xlsx'  # 전송할 엑셀 파일 이름으로 변경하세요.
-# 데이터 전송 간격 (초)
-SEND_INTERVAL_SECONDS = 1
 # --------------------
 
 def create_kafka_producer(servers):
@@ -28,7 +23,7 @@ def create_kafka_producer(servers):
         print(f"Kafka Producer 생성 중 오류 발생: {e}")
         return None
 
-def send_data_from_excel(producer, topic, file_path):
+def send_data_from_excel(producer, topic, file_path, send_interval):
     """엑셀 파일에서 데이터를 읽어 Kafka 토픽으로 전송합니다."""
     try:
         # 엑셀 파일 읽기
@@ -65,7 +60,7 @@ def send_data_from_excel(producer, topic, file_path):
             # 만약 엑셀에 시간 간격 컬럼이 있다면 아래와 같이 활용할 수 있습니다.
             # sleep_time = row_dict.get('time_diff_seconds', SEND_INTERVAL_SECONDS)
             # time.sleep(sleep_time)
-            time.sleep(SEND_INTERVAL_SECONDS)
+            time.sleep(send_interval)
 
         print("모든 데이터 전송을 완료했습니다.")
 
@@ -75,16 +70,25 @@ def send_data_from_excel(producer, topic, file_path):
         print(f"데이터 전송 중 오류 발생: {e}")
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='엑셀 데이터를 Kafka로 전송')
+    parser.add_argument('excel_file', help='전송할 엑셀 파일 이름')
+    parser.add_argument('topic', nargs='?', help='Kafka 토픽 이름')
+    parser.add_argument('--topic', dest='topic_opt', help='Kafka 토픽 이름')
+    parser.add_argument('--interval', type=float, default=1, help='데이터 전송 간격(초)')
+    args = parser.parse_args()
+
+    topic_name = args.topic_opt or args.topic or 'data_topic'
+
     # 스크립트가 위치한 디렉토리 경로 설정
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    excel_file_path = os.path.join(script_dir, EXCEL_FILE_NAME)
+    excel_file_path = os.path.join(script_dir, args.excel_file)
 
     # Kafka Producer 생성
     kafka_producer = create_kafka_producer(BOOTSTRAP_SERVERS)
 
     if kafka_producer:
         # 데이터 전송 함수 호출
-        send_data_from_excel(kafka_producer, TOPIC_NAME, excel_file_path)
+        send_data_from_excel(kafka_producer, topic_name, excel_file_path, args.interval)
         # 프로듀서 리소스 정리
         kafka_producer.flush()
         kafka_producer.close()

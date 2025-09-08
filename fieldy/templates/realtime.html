@@ -90,13 +90,19 @@
     let userScrubbing = false;
     let noDataTimer;
 
-    const socket = io.connect(window.location.protocol + '//' + window.location.host, {
-        secure: window.location.protocol === 'https:',
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000
-    });
+    const params = new URLSearchParams(window.location.search);
+    const topic = params.get('topic') || 'data_topic';
+
+    const socket = io.connect(
+        `${window.location.protocol}//${window.location.host}?topic=${encodeURIComponent(topic)}`,
+        {
+            secure: window.location.protocol === 'https:',
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000
+        }
+    );
 
     viewer.timeline.addEventListener('settime', function(e){
       userScrubbing = true;

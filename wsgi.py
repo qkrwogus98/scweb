@@ -1,5 +1,5 @@
 from flask.helpers import get_debug_flag
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from fieldy import create_app
 from kafka import KafkaConsumer
 import json
@@ -11,6 +11,7 @@ import os
 import traceback
 from flask import jsonify
 from datetime import datetime, timezone
+from collections import defaultdict
 
 load_dotenv()
 
@@ -30,14 +31,19 @@ socketio = SocketIO(
     ping_interval=25  # 핑 간격 설정
 )
 
-active_clients = 0
+listeners = {}
+active_clients = defaultdict(int)
+client_topics = {}
+topic_bounds = {}
 
-def create_kafka_consumer():
+def create_kafka_consumer(topic):
     return KafkaConsumer(
-        'data_topic',
+        topic,
         bootstrap_servers='localhost:9092',
-        value_deserializer=lambda v: json.loads(v.decode('utf-8'))
-    ) 
+        value_deserializer=lambda v: json.loads(v.decode('utf-8')),
+        auto_offset_reset='earliest',
+        group_id=f'webapp-{topic}'
+    )
 
 # Middleware to redirect HTTP to HTTPS
 @app.before_request
@@ -50,9 +56,9 @@ def before_request():
         url = request.url.replace("http://", "https://", 1)
         return redirect(url, code=301)
 
-def kafka_listener():
-    print("listener is starting")
-    consumer = create_kafka_consumer()
+def kafka_listener(topic):
+    print(f"listener for {topic} is starting")
+    consumer = create_kafka_consumer(topic)
     try:
         for message in consumer:
             data = message.value
@@ -67,7 +73,8 @@ def kafka_listener():
                     if end_iso:
                         end_dt = datetime.fromisoformat(end_iso)
                         bounds['end'] = end_dt.replace(tzinfo=timezone.utc).isoformat()
-                    socketio.emit('timeline_bounds', bounds)
+                    topic_bounds[topic] = bounds
+                    socketio.emit('timeline_bounds', bounds, room=topic)                
                 except ValueError:
                     pass
                 socketio.sleep(0)
@@ -79,14 +86,16 @@ def kafka_listener():
                     data['Date'] = dt.replace(tzinfo=timezone.utc).isoformat()
                 except ValueError:
                     pass
-            socketio.emit('data', data)
+            socketio.emit('data', data, room=topic)
             socketio.sleep(0)
-            if active_clients == 0:
-                print("closing kafka listener")
+            if active_clients[topic] == 0:
+                print(f"closing kafka listener for {topic}")
                 break
         consumer.close()
     except Exception as e:
         logging.error(f"Kafka listener encountered an error: {e}")
+    finally:
+        listeners.pop(topic,None)
 
 @app.errorhandler(500)
 def internal_error(error):
@@ -97,19 +106,26 @@ def internal_error(error):
 @socketio.on('connect')
 def handle_connect():
     print("socket connected")
-    global active_clients
-    active_clients += 1
-    print("current active clients :", active_clients)
+    topic = request.args.get('topic', 'data_topic')
+    client_topics[request.sid] = topic
+    join_room(topic)
+    active_clients[topic] += 1
+    print("current active clients for", topic, ":", active_clients[topic])
 
-    if active_clients == 1:  # Start Kafka listener when first client connects
-        socketio.start_background_task(kafka_listener)
+    if topic not in listeners:
+        listeners[topic] = socketio.start_background_task(kafka_listener, topic)
     emit('status', {'status': 'connected'})
+
+    bounds = topic_bounds.get(topic)
+    if bounds:
+        emit('timeline_bounds', bounds)
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    global active_clients
-    active_clients -= 1
-    print("current active clients :", active_clients)
+    topic = client_topics.pop(request.sid, 'data_topic')
+    leave_room(topic)
+    active_clients[topic] -= 1
+    print("current active clients for", topic, ":", active_clients[topic])
     emit('status', {'status': 'disconnected'})
 
 # 디버깅을 위한 추가 이벤트 핸들러
