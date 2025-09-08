@@ -93,6 +93,8 @@
     const params = new URLSearchParams(window.location.search);
     const topic = params.get('topic') || 'data_topic';
 
+    console.log('topic', topic)
+
     const socket = io.connect(
         `${window.location.protocol}//${window.location.host}?topic=${encodeURIComponent(topic)}`,
         {

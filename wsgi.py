@@ -12,6 +12,7 @@ import traceback
 from flask import jsonify
 from datetime import datetime, timezone
 from collections import defaultdict
+import uuid
 
 load_dotenv()
 
@@ -42,7 +43,8 @@ def create_kafka_consumer(topic):
         bootstrap_servers='localhost:9092',
         value_deserializer=lambda v: json.loads(v.decode('utf-8')),
         auto_offset_reset='earliest',
-        group_id=f'webapp-{topic}'
+        enable_auto_commit=False,
+        group_id=str(uuid.uuid4())
     )
 
 # Middleware to redirect HTTP to HTTPS
