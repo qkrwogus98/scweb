@@ -44,6 +44,10 @@ def delete_project(project_id):
 def realtime():
     return render_template('realtime.html',cs_token=CS_TOKEN)
 
+@bp.get('/realtime_rooms')
+def realtime_rooms():
+    return render_template('realtime_rooms.html',cs_token=CS_TOKEN)
+
 @bp.route('/new/<int:project_id>')
 def new_project2(project_id):
     return render_template('new2.html', project_id=project_id,cs_token=CS_TOKEN)
