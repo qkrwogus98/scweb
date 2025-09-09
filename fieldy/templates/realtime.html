@@ -92,7 +92,8 @@
     let noDataTimer;
 
     const params = new URLSearchParams(window.location.search);
-    const topic = params.get('topic') || 'data_topic';
+    const topicParam = params.get('topic');
+    const topic = topicParam || 'data_topic';
 
     console.log('topic', topic)
 
@@ -281,13 +282,26 @@
 
     const projects = [
       { name: '김포-파주 실증 현장', address: '경기도 김포시 양촌읍 흥신리 193-174', lat: 37.6754867, lon: 126.6303532 },
-      { name: '파주 고속도로', address: '경기도 파주시 법원읍 보광로 1704-74', lat: 37.8296017, lon: 126.8712626 },
-      { name: '일산 테크노벨리 조성공사', address: '경기도 고양시 일산서구 법곳동 199', lat: 37.66192709972412, lon: 126.72805183952947 },
+      { name: '파주 고속도로', address: '경기도 파주시 법원읍 보광로 1704-74', lat: 37.8296017, lon: 126.8712626, topic: 'truck_topic' },
+      { name: '일산 테크노벨리 조성공사', address: '경기도 고양시 일산서구 법곳동 199', lat: 37.66192709972412, lon: 126.72805183952947, topic: 'dozer_topic' },
       // Add more projects as needed
     ];
 
     $(document).ready(function() {
       const projectSelector = $('#projectSelector');
+      if (topicParam) {
+        projectSelector.hide();
+        const project = projects.find(p => p.topic === topicParam);
+        if (project) {
+          const position = Cesium.Cartesian3.fromDegrees(
+            project.lon,
+            project.lat,
+            Cesium.Cartographic.fromDegrees(project.lon, project.lat).height + 600
+          );
+          viewer.camera.flyTo({ destination: position });
+        }
+        return;
+      }
       projects.forEach(project => {
         const projectItem = $(`
           <div class="project-item" data-address="${project.address}">
@@ -297,11 +311,16 @@
         `);
         projectItem.on('click', function() {
           projectSelector.hide();
-          const position = Cesium.Cartesian3.fromDegrees(project.lon, project.lat,
-            Cesium.Cartographic.fromDegrees(project.lon, project.lat).height + 600);
-          viewer.camera.flyTo({
-            destination: position
-          });
+          if (project.topic) {
+            window.location.href = `${window.location.pathname}?topic=${project.topic}`;
+            return;
+          }
+          const position = Cesium.Cartesian3.fromDegrees(
+            project.lon,
+            project.lat,
+            Cesium.Cartographic.fromDegrees(project.lon, project.lat).height + 600
+          );
+          viewer.camera.flyTo({ destination: position });     
         });
         projectSelector.append(projectItem);
       });
