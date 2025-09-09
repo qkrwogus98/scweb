@@ -61,6 +61,7 @@ def before_request():
 def kafka_listener(topic):
     print(f"listener for {topic} is starting")
     consumer = create_kafka_consumer(topic)
+    last_time = None    
     try:
         for message in consumer:
             data = message.value
@@ -80,16 +81,30 @@ def kafka_listener(topic):
                 except ValueError:
                     pass
                 socketio.sleep(0)
+                last_time = None
                 continue
             raw_date = data.get('Date')
+            timestamp = None
             if raw_date:
                 try:
                     dt = datetime.fromisoformat(raw_date)
                     data['Date'] = dt.replace(tzinfo=timezone.utc).isoformat()
+                    timestamp = dt
                 except ValueError:
                     pass
+
+            if last_time is not None:
+                delay = 1.0
+                if timestamp:
+                    diff = (timestamp - last_time).total_seconds()
+                    if diff > 0:
+                        delay = diff
+                socketio.sleep(delay)
+
             socketio.emit('data', data, room=topic)
             socketio.sleep(0)
+            if timestamp:
+                last_time = timestamp
             if active_clients[topic] == 0:
                 print(f"closing kafka listener for {topic}")
                 break
