@@ -203,14 +203,9 @@
           pos.forwardExtrapolationDuration = 0;
           pos.backwardExtrapolationDuration = 30;
           
-          let orientationProp;
-          if (asset_type === 6) {
-            orientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
-            orientationProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
-            orientationProp.forwardExtrapolationDuration = 0;
-          } else {
-            orientationProp = new Cesium.VelocityOrientationProperty(pos);
-          }
+          const orientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
+          orientationProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+          orientationProp.forwardExtrapolationDuration = 0;
 
           entityMap.set(equip_id, viewer.entities.add({
             position: pos,
@@ -253,7 +248,6 @@
 
         const entity = entityMap.get(equip_id);
 
-        if (asset_type === 6) {
           const headingRadians = Cesium.Math.toRadians(heading || 0) - Cesium.Math.PI_OVER_TWO;
           const quaternion = Cesium.Transforms.headingPitchRollQuaternion(
             adjustedPosition,
@@ -267,14 +261,6 @@
           }
           entity.position.addSample(sampleTime, adjustedPosition);
           entity.orientation.addSample(sampleTime, quaternion);
-        } else {
-          if (!initializedMap.get(equip_id)) {
-            const past = Cesium.JulianDate.addSeconds(sampleTime, -1, new Cesium.JulianDate());
-            entity.position.addSample(past, adjustedPosition);
-            initializedMap.set(equip_id, true);
-          }
-          entity.position.addSample(sampleTime, adjustedPosition);        
-        }
       })
       .catch((error) => {
         console.error('error : ', error)
