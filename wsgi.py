@@ -2,6 +2,7 @@ from flask.helpers import get_debug_flag
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from fieldy import create_app
 from kafka import KafkaConsumer
+from kafka.errors import NoBrokersAvailable
 import json
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask import request, redirect
@@ -60,8 +61,18 @@ def before_request():
 
 def kafka_listener(topic):
     print(f"listener for {topic} is starting")
-    consumer = create_kafka_consumer(topic)
-    last_time = None    
+    try:
+        consumer = create_kafka_consumer(topic)
+    except NoBrokersAvailable as e:
+        logging.error(f"Kafka broker not available for {topic}: {e}")
+        listeners.pop(topic, None)
+        return
+    except Exception as e:
+        logging.error(f"Failed to create Kafka consumer for {topic}: {e}")
+        listeners.pop(topic, None)
+        return
+
+    last_time = None   
     try:
         for message in consumer:
             data = message.value
@@ -108,11 +119,11 @@ def kafka_listener(topic):
             if active_clients[topic] == 0:
                 print(f"closing kafka listener for {topic}")
                 break
-        consumer.close()
     except Exception as e:
         logging.error(f"Kafka listener encountered an error: {e}")
     finally:
-        listeners.pop(topic,None)
+        consumer.close()
+        listeners.pop(topic, None)
 
 @app.errorhandler(500)
 def internal_error(error):
